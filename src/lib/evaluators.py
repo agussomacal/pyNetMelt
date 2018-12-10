@@ -26,7 +26,7 @@ class SeedTargetRanking(Evaluator):
         """
 
         :param network: network to use
-        :param seeds_matrix: numpy matrix where columns are real numbers denoting the degree of seed foer each test/train
+        :param seeds_matrix: numpy matrix where columns are real numbers denoting the degree of seed for each test/train
         set. 0 no seed, > 0 some degree of seed. -1 anti-seed?? If there are two classes maybe.
         :param targets_list: list of target nodes.
         :return: ranking list of target nodes
@@ -56,7 +56,7 @@ class AUROClinkage(SeedTargetRanking):
         """
         TODO: warning! roc_auc_score is not clear what does if max_fpr not 1
         :param target_rankings:
-        :param true_targets:
+        :param true_targets: true_targets is a mask, should be the same shape as target_rankings
         :return:
         """
 
@@ -72,6 +72,17 @@ class AUROClinkage(SeedTargetRanking):
 
     def __init__(self, seeds_matrix, targets_list, true_targets, alpha, tol=1e-08, max_iter=100,
                  laplacian_exponent=-0.5, max_fpr=1):
+        """
+
+        :param seeds_matrix:
+        :param targets_list:
+        :param true_targets: true_targets is a mask, should be the same shape as targets_list
+        :param alpha:
+        :param tol:
+        :param max_iter:
+        :param laplacian_exponent:
+        :param max_fpr:
+        """
         self.metric_name = "AUROC_{}".format(max_fpr)
         self.max_fpr = max_fpr
 

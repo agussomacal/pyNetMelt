@@ -1,6 +1,7 @@
 
+import numpy as np
 import pandas as pd
-from bayes_opt import BayesianOptimization
+# from bayes_opt import BayesianOptimization
 from hyperopt import hp, tpe, fmin
 from hyperopt import Trials
 
@@ -141,7 +142,7 @@ class OptimizeIntegrator:
     def __init__(self, evaluator):
         self.evaluator = evaluator
 
-    def optimize(self, integrator, max_evals, maximize=True):
+    def optimize(self, integrator, max_evals, maximize=True, return_laplacian=True):
         """
 
         :param integrator:
@@ -157,7 +158,7 @@ class OptimizeIntegrator:
 
         def optim_func(space):
             gamma = np.array(list(space.values()))
-            return self.evaluator.evaluate(integrator.integrate(gamma))
+            return self.evaluator.evaluate(integrator.integrate(gamma, return_laplacian))
 
         space = {network_name: hp.uniform(network_name, 0, 1) for network_name in integrator.network_names}
 
