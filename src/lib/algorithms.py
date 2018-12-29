@@ -34,7 +34,6 @@ def normalize_by_strength(matrix, exponent, strength, exponent_sign=None):
     return np.transpose(s1 * np.transpose(s2 * matrix))
 
 
-
 ########################################################################################################################
 class Network:
     def __init__(self, matrix=np.array([]), node_names=None):
@@ -131,6 +130,20 @@ class Network:
 
     def number_of_nodes(self):
         return len(self.node_names)
+
+    def set_nodes(self, new_set_of_nodes):
+        """
+        TODO: warning, not memory efficient. creating zeros matrix unnecessarily.
+        """
+
+        common_nodes_ix = [i for i, node in enumerate(self.node_names) if node in new_set_of_nodes]
+        number_of_common_nodes = len(common_nodes_ix)
+        temp_matrix = np.zeros((len(new_set_of_nodes), len(new_set_of_nodes)))
+        temp_matrix[:number_of_common_nodes,:][:,:number_of_common_nodes] = \
+            self.matrix[:, common_nodes_ix][common_nodes_ix, :]
+        self.matrix = temp_matrix
+        self.node_names = list(np.append(np.array(self.node_names)[common_nodes_ix],
+                                         np.array(list(set(new_set_of_nodes).difference(self.node_names)))))
 
 
 ########################################################################################################################

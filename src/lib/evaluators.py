@@ -8,6 +8,9 @@ import numpy as np
 
 import algorithms
 
+"""
+"""
+
 
 class Evaluator:
     def __init__(self, evaluator_function):
@@ -19,6 +22,12 @@ class Evaluator:
 
 class SeedTargetRanking(Evaluator):
     """
+    TODO: kfold
+    # from sklearn.model_selection import StratifiedKFold
+#         skf = StratifiedKFold(n_splits=self.kfold)
+#         train_seed_set = []
+#         test_seed_set = []
+#         for i, (train_ix, test_ix) in enumerate(skf.split(seeds, groups)):
     TODO: define clusters of seeds and use only one them to prioritize when looking for disease gene.
     """
 
@@ -74,14 +83,14 @@ class AUROClinkage(SeedTargetRanking):
                  laplacian_exponent=-0.5, max_fpr=1):
         """
 
-        :param seeds_matrix:
-        :param targets_list:
+        :param seeds_matrix: matriz with weights on seeds and 0 otherwise to multiply and perform propagation.
+        :param targets_list: which are the targets to look for and test.
         :param true_targets: true_targets is a mask, should be the same shape as targets_list
-        :param alpha:
-        :param tol:
-        :param max_iter:
-        :param laplacian_exponent:
-        :param max_fpr:
+        :param alpha: propagation algorithm parameter.
+        :param tol: tolerance to stop propagation when both vectors, t and t-1 are similar.
+        :param max_iter: of label propagator.
+        :param laplacian_exponent: exponent of the propagation laplacian.
+        :param max_fpr: max false positive rate to see performance.
         """
         self.metric_name = "AUROC_{}".format(max_fpr)
         self.max_fpr = max_fpr
