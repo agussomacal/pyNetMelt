@@ -37,22 +37,33 @@ class SeedTargetRanking(Evaluator):
         :param network: network to use
         :param seeds_matrix: numpy matrix where columns are real numbers denoting the degree of seed for each test/train
         set. 0 no seed, > 0 some degree of seed. -1 anti-seed?? If there are two classes maybe.
-        :param targets_list: list of target nodes.
+        :param targets_list: list of tests; each tests is another list with the names of the target nodes.
         :return: ranking list of target nodes
         """
         score_matrix = algorithms.Propagator.label_propagator(network, seeds_matrix, self.alpha, tol=self.tol,
                                                               max_iter=self.max_iter, exponent=self.laplacian_exponent)
         score_matrix = score_matrix * (seeds_matrix == 0)  # drop from ranking all seeds
 
-        ranking = []
-        for i, targets in enumerate(targets_list):
-            ranking.append((score_matrix.shape[0] - score_matrix[targets, i].argsort().argsort()).tolist())
+        # ranking = []
+        # for i, targets in enumerate(targets_list):
+        #     ranking.append((score_matrix.shape[0] - score_matrix[targets, i].argsort().argsort()).tolist())
 
-        # score_matrix = np.array([score_matrix[targets, i] for i, targets in enumerate(targets_list.T)]).T # target scores
-        # ranking = score_matrix.shape[0]-score_matrix.argsort(axis=0).argsort(axis=0)
+        score_matrix = np.array([score_matrix[targets, i] for i, targets in enumerate(np.array(targets_list))]).T # target scores
+        ranking = score_matrix.shape[0]-score_matrix.argsort(axis=0).argsort(axis=0)
         return ranking
 
     def __init__(self, ranking_to_value_function, seeds_matrix, targets_list, true_targets_list, alpha, tol=1e-08, max_iter=100, exponent=-0.5):
+        """
+
+        :param ranking_to_value_function:
+        :param seeds_matrix:
+        :param targets_list: list of tests; each tests is another list with the names of the target nodes.
+        :param true_targets_list: list of tests; each tests is another list with the names of the true target nodes.
+        :param alpha:
+        :param tol:
+        :param max_iter:
+        :param exponent:
+        """
         self.alpha = alpha
         self.tol = tol
         self.max_iter = max_iter
@@ -78,10 +89,15 @@ class AUROClinkage(SeedTargetRanking):
         :return:
         """
 
-        y_score = [-ranking for target_rankings in target_rankings_list for ranking in target_rankings]
+        # y_score = [-ranking for target_rankings in target_rankings_list for ranking in target_rankings]
+        # fpr, tpr, thresholds = metrics.roc_curve(y_true=self.y_true,
+        #                                          y_score=y_score)
 
         fpr, tpr, thresholds = metrics.roc_curve(y_true=self.y_true,
-                                                 y_score=y_score)
+                                                 y_score=-target_rankings_list.T.ravel())
+
+
+
 
         # warning! -terget_rankings because roc_auc goes from minus to plus
         # fpr, tpr, thresholds = metrics.roc_curve(y_true=[element for tt in true_targets for element in tt],
@@ -117,50 +133,49 @@ class AUROClinkage(SeedTargetRanking):
 
 
 if __name__ == "__main__":
-    import numpy as np
-
-    # y = np.array([1, 1, 2, 2])
-    # scores = np.array([0.1, 0.4, 0.35, 0.8])
-    # fpr, tpr, thresholds = metrics.roc_curve(y, scores, pos_label=2)
-    # print(fpr, tpr, thresholds)
-    # print(metrics.auc(fpr, tpr))
-    #
-    # # -------------------
-    # y = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
-    # scores = np.array([[0, 1, 2, 3], [0, 1, 2, 3]])
-    # fpr, tpr, thresholds = metrics.roc_curve(y.ravel(), -scores.ravel())
-    # print(fpr, tpr, thresholds)
-    # print(metrics.roc_auc_score(y.ravel(), -scores.ravel(), max_fpr=1))
-
-    # -------------------
     np.random.seed(1)
-    n_targets = 4
-    N = 6
+    n_targets = 10
+    N = 50  # number of nodes
 
-    seeds_matrix = np.eye(N)
-    targets_list = np.array([np.roll(np.arange(N), -n)[1:] for n in range(N)]).T
-    targets_list = targets_list[:n_targets, :]
-    # true_targets = np.zeros(targets_list.shape)
-    # true_targets[1, :] = 1
-    true_targets = targets_list[0].reshape((-1, 1))
+    laplacian_exponent = -0.5  # exponent of laplacian method
+    alpha = 0.2  # alpha of the propagation
 
-    alpha = 0.2
-    laplacian_exponent = -0.5
+    max_fpr = 1
+    max_iter = 100
 
-    print(targets_list)
-    print(true_targets)
-    # print(true_targets.ravel("F"))
-
+    # --------------------------
     # x = np.random.uniform(size=(N, N))
     # network = algorithms.Network(1*((x + x.T) >= 1))
     x = np.roll(np.eye(N), 1, axis=0)
-    network = algorithms.Network(x+x.T)
+    network = algorithms.Network(x + x.T)
     network = algorithms.Network(x)
+    print(network)
 
-    evalauc = AUROClinkage(seeds_matrix, targets_list, true_targets, alpha, tol=1e-08, max_iter=100, max_fpr=1,
-                           laplacian_exponent=laplacian_exponent)
+    # --------------------------
+    seeds_matrix = np.eye(N)
+    targets_list = [np.roll(np.arange(N), -n)[1:(n_targets + 1)] for n in range(N)]
+
+    p1 = 0.8
+    p = np.repeat((1 - p1) / (n_targets - 1), n_targets - 1)
+    p = np.insert(p, 0, p1)
+    print(p)
+    true_targets = [[int(np.random.choice(targets, size=1, p=p))] for targets in targets_list]
+
+    print("Target list:")
+    print(targets_list)
+    print("True targets")
+    print(true_targets)
+
+    # --------------------------
+    evalauc = AUROClinkage(seeds_matrix,
+                                      targets_list,
+                                      true_targets,
+                                      alpha=alpha,
+                                      tol=1e-08,
+                                      max_iter=max_iter,
+                                      max_fpr=max_fpr,
+                                      laplacian_exponent=laplacian_exponent)
     auc = evalauc.evaluate(network)
 
-    print(auc)
-    print(network)
+    print("AUC: {:.5f}".format(auc))
 

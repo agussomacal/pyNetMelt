@@ -142,6 +142,31 @@ class OptimizeIntegrator:
     def __init__(self, evaluator):
         self.evaluator = evaluator
 
+    def randomly(self, integrator, max_evals, maximize = True, return_laplacian = True):
+
+        def get_gamma():
+            gamma = []
+            probability_rest = 1
+            for _ in integrator.network_names[:-1]:  # do except the last one
+                gamma.append(np.random.uniform(0, 1)*probability_rest)
+                probability_rest = probability_rest*(1-gamma[-1])
+            gamma.append(probability_rest)  # the remaining probability goes to te last
+
+            return np.array(gamma)
+
+        results_cols = integrator.network_names+[self.evaluator.metric_name]
+        tpe_results = pd.DataFrame([], columns=results_cols)
+        for i in range(max_evals):
+            gamma = get_gamma()
+            temp_result = pd.Series(np.nan, index=results_cols)
+            temp_result[integrator.network_names] = gamma
+            temp_result[self.evaluator.metric_name] = self.evaluator.evaluate(integrator.integrate(gamma, return_laplacian))
+
+            tpe_results = tpe_results.append(temp_result, ignore_index=True)
+
+        best = tpe_results.loc[tpe_results[self.evaluator.metric_name].idxmax(), :]
+        return tpe_results, best
+
     def optimize(self, integrator, max_evals, maximize=True, return_laplacian=True):
         """
 
@@ -156,15 +181,25 @@ class OptimizeIntegrator:
         else:
             sign = 1
 
+        def get_gamma_from_values(values):
+            gamma = []
+            probability_rest = 1
+            for val in values[:-1]:  # do except the last one
+                gamma.append(val*probability_rest)
+                probability_rest = probability_rest*(1-val)
+            gamma.append(probability_rest)  # the remaining probability goes to te last
+
+            return np.array(gamma)
+
         def optim_func(space):
-            gamma = np.array(list(space.values()))
+            gamma = get_gamma_from_values(list(space.values()))
             return self.evaluator.evaluate(integrator.integrate(gamma, return_laplacian))
 
         space = {network_name: hp.uniform(network_name, 0, 1) for network_name in integrator.network_names}
 
         # ojo que hay que maximizar entonces va el -
         tpe_trials = Trials()
-        best = fmin(fn=lambda gamma: sign*optim_func(gamma),
+        best = fmin(fn=lambda sp: sign*optim_func(sp),
                     space=space,
                     trials=tpe_trials,
                     algo=tpe.suggest,
@@ -174,13 +209,14 @@ class OptimizeIntegrator:
         tpe_results[self.evaluator.metric_name] = [sign*x['loss'] for x in tpe_trials.results]
         tpe_results = pd.DataFrame(tpe_results)
         # Warning, normalization so it sums up to 1.
-        tpe_results[integrator.network_names] = tpe_results[integrator.network_names].div(tpe_results[integrator.network_names].sum(axis=1), axis=0)
+        for ix, row in tpe_results.iterrows():
+            tpe_results.loc[ix, list(space.keys())] = get_gamma_from_values(row[list(space.keys())])
+        # tpe_results[integrator.network_names] = tpe_results[integrator.network_names].div(tpe_results[integrator.network_names].sum(axis=1), axis=0)
 
+        best = pd.Series(best)
         best[self.evaluator.metric_name] = tpe_results[self.evaluator.metric_name].max()
+        best[list(space.keys())] = get_gamma_from_values(best[list(space.keys())])
         return tpe_results, best
-
-
-
 
 ########################################################################################################################
 if __name__=="__main__":
@@ -264,3 +300,6 @@ if __name__=="__main__":
     print(tpe_trials)
     print(best)
 
+    tpe_trials, best = optimizeAUClinkage.randomly(integrator=integrator, max_evals=max_evals, maximize=True)
+    print(tpe_trials)
+    print(best)
