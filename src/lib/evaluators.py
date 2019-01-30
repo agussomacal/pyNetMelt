@@ -31,13 +31,13 @@ class SeedTargetRanking(Evaluator):
     TODO: define clusters of seeds and use only one of them to prioritize when looking for disease gene.
     """
 
-    def ranking_function(self, network, seeds_matrix, targets_list):
+    def ranking_function(self, network, seeds_matrix, l_targets_ix):
         """
 
         :param network: network to use
         :param seeds_matrix: numpy matrix where columns are real numbers denoting the degree of seed for each test/train
         set. 0 no seed, > 0 some degree of seed. -1 anti-seed?? If there are two classes maybe.
-        :param targets_list: list of tests; each tests is another list with the names of the target nodes.
+        :param l_targets_ix: list of tests; each tests is another list with the names of the target nodes.
         :return: ranking list of target nodes
         """
         score_matrix = algorithms.Propagator.label_propagator(network, seeds_matrix, self.alpha, tol=self.tol,
@@ -45,14 +45,47 @@ class SeedTargetRanking(Evaluator):
         score_matrix = score_matrix * (seeds_matrix == 0)  # drop from ranking all seeds
 
         ranking = []
-        for i, targets in enumerate(targets_list):
+        for i, targets in enumerate(l_targets_ix):
             ranking.append((score_matrix.shape[0] - score_matrix[targets, i].argsort().argsort()).tolist())
 
-        # score_matrix = np.array([score_matrix[targets, i] for i, targets in enumerate(np.array(targets_list))]).T # target scores
+        # score_matrix = np.array([score_matrix[targets, i] for i, targets in enumerate(np.array(l_targets_ix))]).T # target scores
         # ranking = score_matrix.shape[0]-score_matrix.argsort(axis=0).argsort(axis=0)
         return ranking
 
-    def __init__(self, ranking_to_value_function, seeds_matrix, targets_list, true_targets_list, alpha, tol=1e-08, max_iter=100, exponent=-0.5):
+    @staticmethod
+    def find_index_from_names(networks_node_names, specific_node_names):
+        indexes = []
+        for gen in specific_node_names:
+            lix = np.where(gen == np.array(networks_node_names))[0]
+            indexes.append(lix[0])  # appends only the first that appears.
+        return indexes  # return indexes of specific nodes in the set of all nodes.
+
+    @staticmethod
+    def create_start_vector(networks_node_names, l_seeds_ix, l_seeds_weight=None):
+        if l_seeds_weight is None:
+            l_seeds_weight = np.ones(len(l_seeds_ix))
+
+        y0 = np.zeros((len(networks_node_names), len(l_seeds_ix)))
+        for i, (seeds, weight) in enumerate(zip(l_seeds_ix, l_seeds_weight)):
+            y0[seeds, i] = weight
+        return y0
+
+    @staticmethod
+    def get_seed_matrix(networks_node_names, l_seeds, l_seeds_weight):
+        seeds_global_ix = [SeedTargetRanking.find_index_from_names(networks_node_names, seeds) for seeds in l_seeds]
+        return SeedTargetRanking.create_start_vector(networks_node_names, seeds_global_ix, l_seeds_weight)
+
+    @staticmethod
+    def get_target_indexes(networks_node_names, target_nodes):
+        l_targets_ix = []
+        for targets in target_nodes:
+            l_targets_ix.append(SeedTargetRanking.find_index_from_names(networks_node_names, targets))
+            # l_true_targets_ix.append(SeedTargetRanking.find_index_from_names(networks_node_names, true_targets))
+
+        return l_targets_ix
+
+    def __init__(self, ranking_to_value_function, node_names, l_seeds, l_targets, l_true_targets, alpha, l_seeds_weight=None,
+                 tol=1e-08, max_iter=100, exponent=-0.5):
         """
 
         :param ranking_to_value_function:
@@ -64,18 +97,23 @@ class SeedTargetRanking(Evaluator):
         :param max_iter:
         :param exponent:
         """
+        self.node_names = node_names
+
         self.alpha = alpha
         self.tol = tol
         self.max_iter = max_iter
         self.laplacian_exponent = exponent
 
-        # true_targets is a mask, should be the same shape
+        # true_targets is a mask.
         self.y_true = []
-        for targets, true_targets in zip(targets_list, true_targets_list):
+        for targets, true_targets in zip(l_targets, l_true_targets):
             self.y_true += [1 if target in true_targets else 0 for target in targets]
 
+        seeds_matrix = SeedTargetRanking.get_seed_matrix(self.node_names, l_seeds, l_seeds_weight)
+        l_targets_ix = SeedTargetRanking.get_target_indexes(self.node_names, l_targets)
+
         def evaluator_function(network):
-            return ranking_to_value_function(self.ranking_function(network, seeds_matrix, targets_list))
+            return ranking_to_value_function(self.ranking_function(network, seeds_matrix, l_targets_ix))
 
         Evaluator.__init__(self, evaluator_function)
 
@@ -118,8 +156,9 @@ class AUROClinkage(SeedTargetRanking):
             # return metrics.roc_auc_score(y_true=true_targets.ravel(), y_score=-target_rankings.ravel(), max_fpr=self.max_fpr)
             return (1 + (auc_unnormalized - min_auc) / (max_auc - min_auc)) / 2
 
-    def __init__(self, seeds_matrix, targets_list, true_targets_list, alpha, tol=1e-08, max_iter=100,
-                 laplacian_exponent=-0.5, max_fpr=1, auroc_normalized=True):
+    def __init__(self, node_names, l_seeds, l_targets, l_true_targets, alpha, l_seeds_weight=None,
+                 tol=1e-08, max_iter=100, laplacian_exponent=-0.5, max_fpr=1, auroc_normalized=True):
+
         """
 
         :param seeds_matrix: matriz with weights on seeds and 0 otherwise to multiply and perform propagation.
@@ -138,8 +177,16 @@ class AUROClinkage(SeedTargetRanking):
         def ranking_to_value_function(target_rankings_list):
             return self.ranking_to_value(target_rankings_list)
 
-        SeedTargetRanking.__init__(self, ranking_to_value_function, seeds_matrix, targets_list, true_targets_list, alpha, tol, max_iter,
-                                   laplacian_exponent)
+        SeedTargetRanking.__init__(self, ranking_to_value_function,
+                                   node_names=node_names,
+                                   l_seeds=l_seeds,
+                                   l_targets=l_targets,
+                                   l_true_targets=l_true_targets,
+                                   alpha=alpha,
+                                   l_seeds_weight=l_seeds_weight,
+                                   tol=tol,
+                                   max_iter=max_iter,
+                                   exponent=laplacian_exponent)
 
 
 if __name__ == "__main__":
@@ -164,24 +211,26 @@ if __name__ == "__main__":
     print(network)
 
     # --------------------------
-    seeds_matrix = np.eye(N)
-    targets_list = [np.roll(np.arange(N), -n)[1:(n_targets + 1)] for n in range(N)]
+    l_seeds = [[seed] for seed in range(N)]#np.eye(N)
+    l_targets = [np.roll(np.arange(N), -n)[1:(n_targets + 1)] for n in range(N)]
 
     p = np.repeat((1 - p1) / (n_targets - 1), n_targets - 1)
     p = np.insert(p, 0, p1)
     print(p)
-    true_targets = [[int(np.random.choice(targets, size=1, p=p))] for targets in targets_list]
+    l_true_targets = [[int(np.random.choice(targets, size=1, p=p))] for targets in l_targets]
 
     print("Target list:")
-    print(targets_list)
+    print(l_targets)
     print("True targets")
-    print(true_targets)
+    print(l_true_targets)
 
     # --------------------------
-    evalauc = AUROClinkage(seeds_matrix,
-                           targets_list,
-                           true_targets,
+    evalauc = AUROClinkage(node_names=network.node_names,
+                           l_seeds=l_seeds,
+                           l_targets=l_targets,
+                           l_true_targets=l_true_targets,
                            alpha=alpha,
+                           l_seeds_weight=None,
                            tol=1e-08,
                            max_iter=max_iter,
                            max_fpr=max_fpr,
