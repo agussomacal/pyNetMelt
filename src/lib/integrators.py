@@ -142,7 +142,7 @@ class OptimizeIntegrator:
     def __init__(self, evaluator):
         self.evaluator = evaluator
 
-    def randomly(self, integrator, max_evals, maximize = True, return_laplacian = True):
+    def randomly(self, integrator, max_evals, return_laplacian=True):
 
         def get_gamma():
             gamma = []
@@ -273,33 +273,72 @@ if __name__=="__main__":
     ###################################################3
     import numpy as np
     from evaluators import AUROClinkage
-    n_targets = 4
-    N = 50
 
-    seeds_matrix = np.eye(N)
-    targets_list = np.array([np.roll(np.arange(N), -n)[1:] for n in range(N)]).T
-    targets_list = targets_list[:n_targets, :]
-    true_targets = np.zeros(targets_list.shape)
-    true_targets[1, :] = 1
-    alpha = 0.2
+    p1 = 0.6
+    n_targets = 2
+    alpha = 0.5
+    N = 1000
+    max_evals = 1
+    max_fpr = (1-p1)/2
 
+    laplacian_exponent = -0.5
+    max_iter = 100
+    auroc_normalized = False
+
+    # --------------------------
+    # x = np.random.uniform(size=(N, N))
+    # network = algorithms.Network(1*((x + x.T) >= 1))
     x = np.roll(np.eye(N), 1, axis=0)
-    network_1 = algorithms.Network(x)
+    network_1 = algorithms.Network(x + x.T)
+    network_2 = algorithms.Network(x)
     x = np.random.uniform(size=(N, N))
-    network_2 = algorithms.Network(1*((x + x.T) > 1))
+    network_3 = algorithms.Network(1*((x + x.T) > 1))
+    # print(network)
 
-    d_networks = {"Net1": network_1, "Net2": network_2}
+    d_networks = {"Net1": network_1, "Net2": network_2}#, "Net3": network_3}
     integrator = SimpleAdditive(d_networks)
     integrator = LaplacianAdditive(d_networks, -0.5)
-    max_evals = 50
 
-    evaluator = AUROClinkage(seeds_matrix, targets_list, true_targets, alpha, tol=1e-08, max_iter=100, max_fpr=1)
+    # --------------------------
+    seeds_matrix = np.eye(N)
+    targets_list = [np.roll(np.arange(N), -n)[1:(n_targets + 1)] for n in range(N)]
+
+    p = np.repeat((1 - p1) / (n_targets - 1), n_targets - 1)
+    p = np.insert(p, 0, p1)
+    print(p)
+    true_targets = [[int(np.random.choice(targets, size=1, p=p))] for targets in targets_list]
+
+
+    # seeds_matrix = np.eye(N)
+    # targets_list = np.array([np.roll(np.arange(N), -n)[1:] for n in range(N)]).T
+    # targets_list = targets_list[:n_targets, :]
+    # true_targets = np.zeros(targets_list.shape)
+    # true_targets[1, :] = 1
+
+    # x = np.roll(np.eye(N), 1, axis=0)
+    # network_1 = algorithms.Network(x)
+
+    # --------------------------
+    evaluator = AUROClinkage(seeds_matrix,
+                             targets_list,
+                             true_targets,
+                             alpha=alpha,
+                             tol=1e-08,
+                             max_iter=max_iter,
+                             max_fpr=max_fpr,
+                             laplacian_exponent=laplacian_exponent,
+                             auroc_normalized=auroc_normalized)
+    # evaluator = AUROClinkage(seeds_matrix, targets_list, true_targets, alpha, tol=1e-08, max_iter=100, max_fpr=max_fpr)
     print(evaluator.metric_name)
     optimizeAUClinkage = OptimizeIntegrator(evaluator)
     tpe_trials, best = optimizeAUClinkage.optimize(integrator=integrator, max_evals=max_evals, maximize=True)
     print(tpe_trials)
     print(best)
 
-    tpe_trials, best = optimizeAUClinkage.randomly(integrator=integrator, max_evals=max_evals, maximize=True)
+    tpe_trials, best = optimizeAUClinkage.randomly(integrator=integrator, max_evals=max_evals)
     print(tpe_trials)
     print(best)
+
+    # print((5*p1-4*p1**2)/8)
+    print(p1*(1-p1)/8)
+
