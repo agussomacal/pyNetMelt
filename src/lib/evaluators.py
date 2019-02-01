@@ -31,21 +31,20 @@ class SeedTargetRanking(Evaluator):
     TODO: define clusters of seeds and use only one of them to prioritize when looking for disease gene.
     """
 
-    def ranking_function(self, network, seeds_matrix, l_targets_ix):
+    def ranking_function(self, laplacian, seeds_matrix, l_targets_ix):
         """
 
-        :param network: network to use
+        :param laplacian: laplacian to use
         :param seeds_matrix: numpy matrix where columns are real numbers denoting the degree of seed for each test/train
         set. 0 no seed, > 0 some degree of seed. -1 anti-seed?? If there are two classes maybe.
         :param l_targets_ix: list of tests; each tests is another list with the names of the target nodes.
         :return: ranking list of target nodes
         """
-        score_matrix = algorithms.Propagator.label_propagator(network,
+        score_matrix = algorithms.Propagator.label_propagator(laplacian,
                                                               seeds_matrix,
                                                               self.alpha,
                                                               tol=self.tol,
-                                                              max_iter=self.max_iter,
-                                                              exponent=self.laplacian_exponent)
+                                                              max_iter=self.max_iter)
         score_matrix = score_matrix * (seeds_matrix == 0)  # drop from ranking all seeds
 
         ranking = []
@@ -117,7 +116,13 @@ class SeedTargetRanking(Evaluator):
         l_targets_ix = SeedTargetRanking.get_target_indexes(self.node_names, l_targets)
 
         def evaluator_function(network):
-            return ranking_to_value_function(self.ranking_function(network, seeds_matrix, l_targets_ix))
+            if type(network) == algorithms.Adjacency:
+                laplacian = network.get_laplacian(self.laplacian_exponent)
+            elif type(network) == algorithms.Laplacian:
+                laplacian = network
+            else:
+                raise Exception("network is not either an adjacency nor a laplacian.")
+            return ranking_to_value_function(self.ranking_function(laplacian, seeds_matrix, l_targets_ix))
 
         Evaluator.__init__(self, evaluator_function)
 
@@ -209,9 +214,9 @@ if __name__ == "__main__":
 
     # --------------------------
     # x = np.random.uniform(size=(N, N))
-    # network = algorithms.Network(1*((x + x.T) >= 1))
+    # network = algorithms.Adjacency(1*((x + x.T) >= 1))
     x = np.roll(np.eye(N), 1, axis=0)
-    network = algorithms.Network(x)
+    network = algorithms.Adjacency(x)
     print(network)
 
     # --------------------------

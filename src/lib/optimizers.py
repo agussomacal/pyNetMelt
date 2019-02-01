@@ -134,12 +134,12 @@ if __name__=="__main__":
 
     # --------------------------
     # x = np.random.uniform(size=(N, N))
-    # network = algorithms.Network(1*((x + x.T) >= 1))
+    # network = algorithms.Adjacency(1*((x + x.T) >= 1))
     x = np.roll(np.eye(N), 1, axis=0)
-    network_1 = algorithms.Network(x + x.T)
-    network_2 = algorithms.Network(x)
+    network_1 = algorithms.Adjacency(x + x.T)
+    network_2 = algorithms.Adjacency(x)
     x = np.random.uniform(size=(N, N))
-    network_3 = algorithms.Network(1*((x + x.T) > 1))
+    network_3 = algorithms.Adjacency(1*((x + x.T) > 1))
     # print(network)
 
     # ---------------------------
