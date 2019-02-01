@@ -1,7 +1,12 @@
 import numpy as np
 
+######################################################
+#           Constants
+DEFAULT_LAPLACIAN_EXPONENT = -0.5
 
-def normalize_by_strength(matrix, exponent, strength, exponent_sign=None):
+
+######################################################
+def normalize_by_strength(matrix, strength, exponent1, exponent2=None):
     """
     if exponent is positive it will convert from a laplacian to the original adjacency matrix
         D^exponent * matrix * D^(1-exponent)
@@ -16,9 +21,8 @@ def normalize_by_strength(matrix, exponent, strength, exponent_sign=None):
      if exponent is 0 because there is no sign defined and wont understand how to comeback otherwise.
     :return: 
     """
-
-    if exponent_sign is None:
-        exponent_sign = np.sign(exponent)
+    if exponent2 is None:
+        exponent2 = np.sign(exponent1) * (1-np.abs(exponent1))
 
     not_zero_strength_ix = (np.where(strength != 0)[0])
     # s1 = np.power(strength[not_zero_strength_ix], exponent)
@@ -28,15 +32,16 @@ def normalize_by_strength(matrix, exponent, strength, exponent_sign=None):
 
     s1 = np.zeros(len(strength))
     s2 = np.zeros(len(strength))
-    s1[not_zero_strength_ix] = np.power(strength[not_zero_strength_ix], exponent)
-    s2[not_zero_strength_ix] = np.power(strength[not_zero_strength_ix], exponent_sign*(1 - np.abs(exponent)))
+    s1[not_zero_strength_ix] = np.power(strength[not_zero_strength_ix], exponent1)
+    s2[not_zero_strength_ix] = np.power(strength[not_zero_strength_ix], exponent2)
 
     return np.transpose(s1 * np.transpose(s2 * matrix))
 
 
 ########################################################################################################################
 class Network:
-    def __init__(self, matrix=np.array([]), node_names=None):
+    def __init__(self, matrix=np.array([]), node_names=None, network_mode="adjacency",
+                 laplacian_exponent=DEFAULT_LAPLACIAN_EXPONENT, strength=None):
         """
 
         :param adj_matrix: adjacency matrix of the graph. ndarray
@@ -48,7 +53,7 @@ class Network:
         assert matrix.shape[0] == matrix.shape[1]
         self.matrix = matrix
 
-        self.strength = None
+        self.strength = strength
 
         if node_names is None:
             self.node_names = np.arange(self.matrix.shape[0])
@@ -56,16 +61,16 @@ class Network:
             assert len(node_names) == self.matrix.shape[0]
             self.node_names = node_names
 
-        self.kind = "adjacency"
-        self.exponent = None
+        self.network_mode = network_mode
+        self.laplacian_exponent = laplacian_exponent
 
         """
-        :param kind:
+        :param network_mode:
             "adjacency" if it is the adjacency matrix of the graph
             "lambda-laplacian" if it is the laplacian of the graph by multiplying strength matrix to some exponent
             "laplacian" if it is the laplacian: D-A
-        :param exponent:
-            laplacian exponent:
+        :param laplacian_exponent:
+            laplacian laplacian_exponent:
                 0 for the random walk laplacian.
                 0.5 for the symmetric laplacian.
                 1 for the heat laplacian.
@@ -73,24 +78,30 @@ class Network:
 
     def __add__(self, other):
         if type(other) == type(self):
+            assert self.network_mode == other.network_mode
+            assert np.all(self.node_names == other.node_names)
             returned_matrix = self.matrix + other.matrix
         else:
             returned_matrix = self.matrix + other
-        return Network(returned_matrix)
+        return Network(returned_matrix, node_names=self.node_names, network_mode=self.network_mode, laplacian_exponent=self.laplacian_exponent,
+                       strength=self.strength)
 
     def __mul__(self, other):
         if type(other) == type(self):
+            assert self.network_mode == other.network_mode
+            assert np.all(self.node_names == other.node_names)
             returned_matrix = self.matrix * other.matrix
         else:
             returned_matrix = self.matrix * other
-        return Network(returned_matrix)
+        return Network(returned_matrix, node_names=self.node_names, network_mode=self.network_mode, laplacian_exponent=self.laplacian_exponent,
+                       strength=self.strength)
 
     def __rmul__(self, other):
         # it is conmutative
         return self.__mul__(other)
 
     def __str__(self):
-        return "mode: {} \n value: \n {}".format(self.kind, self.matrix)
+        return "mode: {} \n value: \n {}".format(self.network_mode, self.matrix)
 
     def get_strength(self):
         # if it has not yet calculated the strength, it does now.
@@ -107,26 +118,26 @@ class Network:
         """
         self.strength = strength
 
-    def to_laplacian(self, exponent=0.5):
-        transition_exponent = exponent
-        if "laplacian" in self.kind:
-            if self.exponent is not None and exponent != self.exponent:
-                transition_exponent = exponent-self.exponent
-            else:
-                print("Network already in laplacian form. \n Aborting conversion.")
-                return None
+    def to_laplacian(self, laplacian_exponent=DEFAULT_LAPLACIAN_EXPONENT):
 
-        self.matrix = normalize_by_strength(self.matrix, transition_exponent, self.get_strength(), exponent_sign=-1)
-        self.exponent = exponent
-        self.kind = "lambda-laplacian"
+        if "laplacian" in self.network_mode:
+            assert self.laplacian_exponent is not None
+            if laplacian_exponent != self.laplacian_exponent:
+                transition_exponent = laplacian_exponent-self.laplacian_exponent
+                self.matrix = normalize_by_strength(self.matrix, self.get_strength(),
+                                                    exponent1=transition_exponent,
+                                                    exponent2=-transition_exponent)
+        else:
+            self.matrix = normalize_by_strength(self.matrix, self.get_strength(), laplacian_exponent)
+
+        self.laplacian_exponent = laplacian_exponent
+        self.network_mode = "lambda-laplacian"
 
     def to_adjacency(self):
-        if self.kind == "adjacency":
-            print("Network already in adjacency form. \n Aborting conversion.")
-        else:
-            self.matrix = normalize_by_strength(self.matrix, -self.exponent, self.get_strength(), exponent_sign=1)
-            self.exponent = None
-            self.kind = "adjacency"
+        if self.network_mode != "adjacency":
+            self.matrix = normalize_by_strength(self.matrix, self.get_strength(),
+                                                exponent1=-self.laplacian_exponent)
+            self.network_mode = "adjacency"
 
     def number_of_nodes(self):
         return len(self.node_names)
@@ -150,7 +161,7 @@ class Network:
 class Propagator:
 
     @staticmethod
-    def label_propagator(network, seeds_matrix, alpha, tol=1e-08, max_iter=100, exponent=-0.5):
+    def label_propagator(network, seeds_matrix, alpha, tol=1e-08, max_iter=100, exponent=DEFAULT_LAPLACIAN_EXPONENT):
         """
         TODO: make the np.allclose comparison over each column. If one set has already converged, actualize only the rest
 
@@ -166,7 +177,7 @@ class Propagator:
         :return: matrix of flux scores in probability format. each column is normalize to sum 1.
         """
 
-        network.to_laplacian(exponent=exponent)
+        network.to_laplacian(laplacian_exponent=exponent)
         y = seeds_matrix  # initial vector of field
 
         # ------propagacion-----------
@@ -181,9 +192,87 @@ class Propagator:
 
 
 if __name__ == "__main__":
+    N = 5
+    x = np.roll(np.eye(N), 1, axis=0)
+    network_1 = Network(x + x.T, laplacian_exponent=-0.5)
+    print(network_1)
+    network_1.to_laplacian(-0.4)
+    print(network_1)
+    network_1.to_adjacency()
+
+    x=np.array([[0, 1, 1, 0],
+                [1, 0, 1, 0],
+                [1, 1, 0, 1],
+                [0, 0, 1, 0]])
+
+    network_2 = Network(x, laplacian_exponent=-0.4)
+    print(network_2)
+
+    network_2.to_laplacian(-0.5)
+    print(network_2)
+    assert np.allclose(network_2.matrix[0], np.array([ 0, 1/2, 1/np.sqrt(6), 0]))
+    assert np.allclose(network_2.matrix[1][2:], np.array([1/np.sqrt(6), 0]))
+    assert np.allclose(network_2.matrix[2][-1], np.array([1/np.sqrt(3)]))
+
+    network_2.to_laplacian(-0.25)
+    print(network_2)
+    assert np.allclose(network_2.matrix[0], np.array([0, 1 / 2, 1 / (np.power(2, 1 / 4) * np.power(3, 3 / 4)), 0]))
+    assert np.allclose(network_2.matrix[1][2:], np.array([1 / (np.power(2, 1 / 4) * np.power(3, 3 / 4)), 0]))
+    assert np.allclose(network_2.matrix[2][-1], np.array([1 / np.power(3, 1 / 4)]))
+
+    network_2.to_adjacency()
+    print(network_2)
+    ibv
+    # n = Network(np.array([[0, 1, 1, 0],
+    #                       [1, 0, 1, 0],
+    #                       [1, 1, 0, 1],
+    #                       [0, 0, 1, 0]]))
+    #
+    # m = Network(np.array([[1, 0, 1, 0],
+    #                       [0, 0, 1, 1],
+    #                       [1, 1, 0, 1],
+    #                       [0, 1, 1, 0]]))
+    #
+    # # print(n.matrix)
+    # # a = n*n
+    # #
+    # # print(a.get_strength())
+    # # print(a)
+    # # a.to_laplacian(1)
+    # # print(a)
+    # # a.to_adjacency()
+    # # print(a)
+    #
+    # # -------------------
+    # gamma = [0.5, 0.5]
+    # exponent = 1
+    #
+    # n.to_laplacian(exponent)
+    # print(n)
+    #
+    # add = SimpleAdditive([n, m])
+    # w_add = add.integrate(gamma, return_laplacian=False)
+    # add_lap = LaplacianAdditive([n, m], exponent=exponent)
+    # w_addlap = add_lap.integrate(gamma, return_laplacian=False)
+    #
+    # mul = SimpleMultiplicative([n, m])
+    # w_mul = mul.integrate(return_laplacian=False)
+    # mul_lap = LaplacianMultiplicative([n, m], exponent=exponent)
+    # w_mullap = mul_lap.integrate(return_laplacian=False)
+    #
+    # # print(w_add)
+    # print(w_addlap)
+    # n.to_laplacian(exponent)
+    # print(n)
+    # m.to_laplacian(exponent)
+    # print(m)
+    #
+    # # print(w_mul)
+    # # print(w_mullap)
 
     exponent = -0.5
-    matrix = np.array([[1,2],[1,2]])
+
+    matrix = np.array([[1, 2], [1, 2]])
     strength = matrix.sum(axis=0)
     print(strength.shape)
     lap = normalize_by_strength(matrix, exponent, strength)

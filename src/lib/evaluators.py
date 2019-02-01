@@ -40,8 +40,12 @@ class SeedTargetRanking(Evaluator):
         :param l_targets_ix: list of tests; each tests is another list with the names of the target nodes.
         :return: ranking list of target nodes
         """
-        score_matrix = algorithms.Propagator.label_propagator(network, seeds_matrix, self.alpha, tol=self.tol,
-                                                              max_iter=self.max_iter, exponent=self.laplacian_exponent)
+        score_matrix = algorithms.Propagator.label_propagator(network,
+                                                              seeds_matrix,
+                                                              self.alpha,
+                                                              tol=self.tol,
+                                                              max_iter=self.max_iter,
+                                                              exponent=self.laplacian_exponent)
         score_matrix = score_matrix * (seeds_matrix == 0)  # drop from ranking all seeds
 
         ranking = []
@@ -85,7 +89,7 @@ class SeedTargetRanking(Evaluator):
         return l_targets_ix
 
     def __init__(self, ranking_to_value_function, node_names, l_seeds, l_targets, l_true_targets, alpha, l_seeds_weight=None,
-                 tol=1e-08, max_iter=100, exponent=-0.5):
+                 tol=1e-08, max_iter=100, laplacian_exponent=-0.5):
         """
 
         :param ranking_to_value_function:
@@ -95,14 +99,14 @@ class SeedTargetRanking(Evaluator):
         :param alpha:
         :param tol:
         :param max_iter:
-        :param exponent:
+        :param laplacian_exponent:
         """
         self.node_names = node_names
 
         self.alpha = alpha
         self.tol = tol
         self.max_iter = max_iter
-        self.laplacian_exponent = exponent
+        self.laplacian_exponent = laplacian_exponent
 
         # true_targets is a mask.
         self.y_true = []
@@ -186,7 +190,7 @@ class AUROClinkage(SeedTargetRanking):
                                    l_seeds_weight=l_seeds_weight,
                                    tol=tol,
                                    max_iter=max_iter,
-                                   exponent=laplacian_exponent)
+                                   laplacian_exponent=laplacian_exponent)
 
 
 if __name__ == "__main__":
@@ -197,7 +201,7 @@ if __name__ == "__main__":
 
     max_iter = 100
 
-    p1 = 0.9
+    p1 = 0.8
     n_targets = 2
     N = 2000
     max_evals = 1
