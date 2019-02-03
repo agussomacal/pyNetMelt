@@ -74,9 +74,6 @@ class NetworksModes:
     def __add__(self, other):
         pass
 
-    def __radd__(self, other):
-        return self.__add__(other)
-
     def __mul__(self, other):
         pass
 
@@ -138,8 +135,6 @@ class Adjacency(NetworksModes):
                          node_names=self.node_names)
 
 
-
-
 class Laplacian(NetworksModes):
     def __init__(self, matrix, strength, laplacian_exponent, node_names=None):
         self.__name__ = "laplacian_{}".format(laplacian_exponent)
@@ -181,7 +176,6 @@ class Laplacian(NetworksModes):
 
     def infer_strength(self, infering_technik="ones", max_iter=100):
         """
-        TODO: implement infering technik by iterative aproach.
         :param infering_technik:
         :return:
         """

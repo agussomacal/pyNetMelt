@@ -4,6 +4,7 @@ https://github.com/fmfn/BayesianOptimization
 """
 
 from sklearn import metrics
+from sklearn.model_selection import StratifiedKFold
 import numpy as np
 
 import algorithms
@@ -119,7 +120,10 @@ class SeedTargetRanking(Evaluator):
             if type(network) == algorithms.Adjacency:
                 laplacian = network.get_laplacian(self.laplacian_exponent)
             elif type(network) == algorithms.Laplacian:
-                laplacian = network
+                if network.laplacian_exponent != self.laplacian_exponent:
+                    laplacian = network.get_adjacency(infering_technik="iterative").get_laplacian(self.laplacian_exponent)
+                else:
+                    laplacian = network
             else:
                 raise Exception("network is not either an adjacency nor a laplacian.")
             return ranking_to_value_function(self.ranking_function(laplacian, seeds_matrix, l_targets_ix))
@@ -130,7 +134,6 @@ class SeedTargetRanking(Evaluator):
 class AUROClinkage(SeedTargetRanking):
     def ranking_to_value(self, target_rankings_list):
         """
-        TODO: warning! roc_auc_score is not clear what does if max_fpr not 1
         :param target_rankings:
         :param true_targets: true_targets is a mask, should be the same shape as target_rankings
         :return:

@@ -37,7 +37,7 @@ class Optimizer:
 
     @staticmethod
     def gamma_objective_function(space, evaluator, integrator):
-        gamma = Optimizer.get_gamma_from_values(list(space.values()))
+        gamma = Optimizer.get_gamma_from_values([space[network_name] for network_name in integrator.network_names])
         return evaluator.evaluate(integrator.integrate(gamma))
 
     @staticmethod
@@ -48,8 +48,10 @@ class Optimizer:
 
     @staticmethod
     def normalize_network_gamma_coeficients(tpe_results, network_names):
-        for ix, row in tpe_results.iterrows():
-            tpe_results.loc[ix, network_names] = Optimizer.get_gamma_from_values(row[network_names])
+        tpe_results.loc[:, network_names] = \
+            tpe_results.loc[:, network_names].divide(tpe_results.loc[:, network_names].sum(axis=1), axis=0)
+        # for ix, row in tpe_results.iterrows():
+        #     tpe_results.loc[ix, network_names] = Optimizer.get_gamma_from_values(row[network_names])
         return tpe_results
 
     def get_trials(self):
