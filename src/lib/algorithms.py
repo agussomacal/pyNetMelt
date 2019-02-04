@@ -176,15 +176,16 @@ class Laplacian(NetworksModes):
 
     def infer_strength(self, infering_technik="ones", max_iter=100):
         """
+
         :param infering_technik:
         :return:
         """
         strength = np.ones(self.number_of_nodes())
         if infering_technik is "iterative":
             for i in range(max_iter):
-                new_strength = normalize_by_strength(self.matrix,
-                                                     -self.laplacian_exponent,
-                                                     strength).sum(axis=0)
+                new_strength = normalize_by_strength(matrix=self.matrix,
+                                                     exponent1=-self.laplacian_exponent,
+                                                     strength=strength).sum(axis=0)
                 new_strength = new_strength / new_strength.sum() * strength.sum()
                 if np.allclose(new_strength, strength):
                     break
