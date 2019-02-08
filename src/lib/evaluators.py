@@ -8,6 +8,7 @@ from sklearn.model_selection import StratifiedKFold
 import numpy as np
 
 import algorithms
+import networks
 
 """
 """
@@ -117,9 +118,9 @@ class SeedTargetRanking(Evaluator):
         l_targets_ix = SeedTargetRanking.get_target_indexes(self.node_names, l_targets)
 
         def evaluator_function(network):
-            if type(network) == algorithms.Adjacency:
+            if type(network) == networks.Adjacency:
                 laplacian = network.get_laplacian(self.laplacian_exponent)
-            elif type(network) == algorithms.Laplacian:
+            elif type(network) == networks.Laplacian:
                 if network.laplacian_exponent != self.laplacian_exponent:
                     laplacian = network.get_adjacency(infering_technik="iterative").get_laplacian(self.laplacian_exponent)
                 else:
@@ -217,9 +218,9 @@ if __name__ == "__main__":
 
     # --------------------------
     # x = np.random.uniform(size=(N, N))
-    # network = algorithms.Adjacency(1*((x + x.T) >= 1))
+    # network = networks.Adjacency(1*((x + x.T) >= 1))
     x = np.roll(np.eye(N), 1, axis=0)
-    network = algorithms.Adjacency(x)
+    network = networks.Adjacency(x)
     print(network)
 
     # --------------------------

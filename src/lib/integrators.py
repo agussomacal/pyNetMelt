@@ -93,6 +93,7 @@ class LaplacianAdditive(AdditiveMethods, LaplacianMethods):
 ########################################################################################################################
 if __name__=="__main__":
     import numpy as np
+    import networks
 
     np.random.seed(1)
 
@@ -111,10 +112,10 @@ if __name__=="__main__":
 
     # --------------------------
     x = np.roll(np.eye(N), 1, axis=0)
-    network_1 = algorithms.Adjacency(x + x.T)
-    network_2 = algorithms.Adjacency(x)
+    network_1 = networks.Adjacency(x + x.T)
+    network_2 = networks.Adjacency(x)
     x = np.random.uniform(size=(N, N))
-    network_3 = algorithms.Adjacency(1*((x + x.T) > 1))
+    network_3 = networks.Adjacency(1*((x + x.T) > 1))
 
     d_networks = {"Net1": network_1, "Net2": network_2}#, "Net3": network_3}
     print(d_networks)
