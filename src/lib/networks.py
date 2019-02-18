@@ -215,13 +215,16 @@ class Bipartite:
         return self.edgelist[bipartite_side_column_name].unique()
 
     def get_target_column_name(self, bipartite_source_column_name):
+        assert type(bipartite_source_column_name) == str
         return self.edgelist.columns[np.where(self.edgelist.columns[:-1] != bipartite_source_column_name)[0]].tolist()
 
     def get_neighborhood(self, source_node, bipartite_source_column_name):
         target_column_name = self.get_target_column_name(bipartite_source_column_name)
         return self.edgelist.loc[self.edgelist[bipartite_source_column_name].isin([source_node]),target_column_name[0]].unique().tolist()
 
-    def get_proyection(self, bipartite_proyection_column_name, mode="one_mode_proyection", laplacian_exponent=-0.5, simetrize=False):
+    def get_proyection(self, bipartite_proyection_column_name, mode="one_mode_proyection", laplacian_exponent=-0.5,
+                       simetrize=False, to_undirected=True):
+
         """
         laplacian method: normalices the proyection following this methodology:
             w_{ij} = 1/k_{i}^lambda * 1/k_{j}^(1-lambda) * \sum a_{il}a_{lj}/k_{l}
@@ -237,9 +240,11 @@ class Bipartite:
                                              columns=self.get_target_column_name(bipartite_proyection_column_name),
                                              aggfunc='sum')
         B_matrix = B_matrix.fillna(0)
+        if to_undirected:  # forgets that there where weights and counts just as an undirected network
+            B_matrix = B_matrix.apply(lambda c: c.apply(lambda num: 1.0 if num > 0 else 0.0))
 
         if mode == "one_mode_proyection":
-            projection =  pd.DataFrame(np.matmul(B_matrix.values, B_matrix.values.T),
+            projection = pd.DataFrame(np.matmul(B_matrix.values, B_matrix.values.T),
                                        columns=B_matrix.index,
                                        index=B_matrix.index)
         elif "laplacian" in mode:
@@ -267,14 +272,16 @@ class Bipartite:
         return projection
 
     def get_similar_nodes(self, projection, similarity_lower_threshold):
-        dict_of_nodes = dict()
-        dict_of_weights = dict()
+        # dict_of_nodes = dict()
+        # dict_of_weights = dict()
+        dict_of_node_weights = dict()
         for node, node_neig_similarity in projection.items():
             neighbours_ix = np.where(node_neig_similarity.values >= similarity_lower_threshold)[0]
-            dict_of_nodes[node] = projection.index[neighbours_ix].tolist()
-            dict_of_weights[node] = node_neig_similarity[neighbours_ix].tolist()
-
-        return dict_of_nodes, dict_of_weights
+            # dict_of_nodes[node] = projection.index[neighbours_ix].tolist()
+            # dict_of_weights[node] = node_neig_similarity[neighbours_ix].tolist()
+            dict_of_node_weights[node] = node_neig_similarity[neighbours_ix].to_dict()
+        return dict_of_node_weights
+        # return dict_of_node_weights = , dict_of_weights
 
 
 if __name__ == "__main__":
@@ -302,7 +309,10 @@ if __name__ == "__main__":
     print(bi_net.get_nodes_ids("source"))
     print(bi_net.get_nodes_ids("target"))
 
-    edgelist = pd.DataFrame([["A", "1", 1], ["A", "2", 1], ["B", "2", 1], ["B", "3", 1]],
+    edgelist = pd.DataFrame([["A", "1", 1],
+                             ["A", "2", 1],
+                             ["B", "2", 1],
+                             ["B", "3", 1]],
                             columns=["source", "target", "score"])
     bi_net = Bipartite(edgelist)
 
@@ -310,6 +320,9 @@ if __name__ == "__main__":
     print(bi_net.get_proyection("source", "one_mode_proyection"))
     assert (bi_net.get_proyection("source", "laplacian_1", -1, False).values == np.array([[3.0/4, 1/4], [1/4, 3/4]])).all()
     print(bi_net.get_proyection("source", "laplacian_1", -1, False))
+
+    print(bi_net.get_similar_nodes(bi_net.get_proyection("source", "laplacian_1", -1, False), 0.5))
+
 
     # ------ Test Adjacency ------
     N = 5

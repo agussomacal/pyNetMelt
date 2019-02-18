@@ -1,11 +1,14 @@
 import matplotlib.pylab as plt
 
 
-def plot_optimization(x_variable, y_variable, optimizer, tpe_results, color, filename=None, baseline=None):
-    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 7))
+def plot_optimization(x_variable, y_variable, optimizer, tpe_results, color, filename=None, baseline=None, label=None, ax=None):
+    if ax is None:
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 7))
 
+    if label is None:
+        label = x_variable
     # --- plot all evaluations ---
-    ax.plot(tpe_results[x_variable], tpe_results[optimizer.__name__], '.-', c=color, label=x_variable)
+    ax.plot(tpe_results[x_variable], tpe_results[optimizer.__name__], '.-', c=color, label=label)
 
     # --- plot baseline ---
     if baseline is not None:

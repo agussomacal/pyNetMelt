@@ -48,6 +48,7 @@ class SeedTargetRanking(Evaluator):
                                                               tol=self.tol,
                                                               max_iter=self.max_iter)
         score_matrix = score_matrix * (seeds_matrix == 0)  # drop from ranking all seeds
+        assert score_matrix.shape == seeds_matrix.shape
 
         ranking = []
         for i, targets in enumerate(l_targets_ix):
