@@ -272,16 +272,12 @@ class Bipartite:
         return projection
 
     def get_similar_nodes(self, projection, similarity_lower_threshold):
-        # dict_of_nodes = dict()
-        # dict_of_weights = dict()
         dict_of_node_weights = dict()
+        # go through the columns because each column represents the neighbouring out direction of node i if e_i is used.
         for node, node_neig_similarity in projection.items():
             neighbours_ix = np.where(node_neig_similarity.values >= similarity_lower_threshold)[0]
-            # dict_of_nodes[node] = projection.index[neighbours_ix].tolist()
-            # dict_of_weights[node] = node_neig_similarity[neighbours_ix].tolist()
             dict_of_node_weights[node] = node_neig_similarity[neighbours_ix].to_dict()
         return dict_of_node_weights
-        # return dict_of_node_weights = , dict_of_weights
 
 
 if __name__ == "__main__":
