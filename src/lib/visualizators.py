@@ -1,6 +1,14 @@
 import matplotlib.pylab as plt
 
 
+def plot_baseline(baseline, ax):
+    # --- plot baseline ---
+    if "value" in baseline.keys() and "color" in baseline.keys() and "label" in baseline.keys():
+        ax.hlines(baseline["value"], colors=baseline["color"],
+                  xmin=ax.get_xlim()[0], xmax=ax.get_xlim()[1],
+                  linestyle="dashdot", label=baseline["label"])
+
+
 def plot_optimization(x_variable, y_variable, optimizer, tpe_results, color, filename=None, baseline=None, label=None, ax=None):
     if ax is None:
         fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 7))
@@ -12,10 +20,7 @@ def plot_optimization(x_variable, y_variable, optimizer, tpe_results, color, fil
 
     # --- plot baseline ---
     if baseline is not None:
-        if "value" in baseline.keys() and "color" in baseline.keys() and "label" in baseline.keys():
-            ax.hlines(baseline["value"], colors=baseline["color"],
-                      xmin=ax.get_xlim()[0], xmax=ax.get_xlim()[1],
-                      linestyle="dashdot", label=baseline["label"])
+        plot_baseline(baseline, ax)
 
     # --- mark for the maximum ---
     max_ix = tpe_results[optimizer.__name__].idxmax()
