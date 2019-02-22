@@ -33,7 +33,7 @@ class SeedTargetRanking(Evaluator):
     TODO: define clusters of seeds and use only one of them to prioritize when looking for disease gene.
     """
 
-    def ranking_function(self, laplacian, seeds_matrix, l_targets_ix):
+    def ranking_function(self, laplacian, seeds_matrix, l_targets_ix, l_targets_ix_notfound):
         """
 
         :param laplacian: laplacian to use
@@ -51,46 +51,67 @@ class SeedTargetRanking(Evaluator):
         assert score_matrix.shape == seeds_matrix.shape
 
         ranking = []
-        for i, targets in enumerate(l_targets_ix):
-            ranking.append((score_matrix.shape[0] - score_matrix[targets, i].argsort().argsort()).tolist())
+        for i, (targets, targets_not_found) in enumerate(zip(l_targets_ix, l_targets_ix_notfound)):
+            ranked_targets = (score_matrix.shape[0] - score_matrix[targets, i].argsort().argsort()).tolist()
+            # add the targets not found with the worst ranking
+            ranked_targets += [len(targets)+len(targets_not_found)]*len(targets_not_found)
+            ranking.append(ranked_targets)
 
-        # score_matrix = np.array([score_matrix[targets, i] for i, targets in enumerate(np.array(l_targets_ix))]).T # target scores
-        # ranking = score_matrix.shape[0]-score_matrix.argsort(axis=0).argsort(axis=0)
         return ranking
 
     @staticmethod
     def find_index_from_names(networks_node_names, specific_node_names):
+        assert isinstance(specific_node_names, (list, tuple, np.ndarray)), "should be a list or np.array of nodes"
         indexes = []
+        not_in_index = []
         for gen in specific_node_names:
-            lix = np.where(gen == np.array(networks_node_names))[0]
-            indexes.append(lix[0])  # appends only the first that appears.
-        return indexes  # return indexes of specific nodes in the set of all nodes.
+            lix = list(np.where(gen == np.array(networks_node_names))[0])
+            if len(lix) >= 1:
+                assert len(lix) == 1, "There is a duplicated gen in the network"
+                indexes += lix
+            else:
+                not_in_index += [gen]
+        return indexes, not_in_index  # return indexes of specific nodes in the set of all nodes.
 
     @staticmethod
-    def create_start_vector(networks_node_names, l_seeds_ix, l_seeds_weight=None):
-        if l_seeds_weight is None:
-            l_seeds_weight = np.ones(len(l_seeds_ix))
+    def find_index_weight_from_names(networks_node_names, specific_node_names):
+        assert isinstance(specific_node_names, dict), "should be a dictionary of nodes: weight"
+        indexes2weight = dict()
+        not_in_index = []
+        for gen in specific_node_names.keys():
+            lix = list(np.where(gen == np.array(networks_node_names))[0])
+            assert len(lix) == 1, "There is a duplicated gen in the network"
+            for ix in lix:
+                indexes2weight[ix] = specific_node_names[gen]
+        else:
+            not_in_index += [gen]
+        return indexes2weight, not_in_index  # return indexes of specific nodes in the set of all nodes.
 
+    @staticmethod
+    def create_start_vector(networks_node_names, l_seeds_ix):
         y0 = np.zeros((len(networks_node_names), len(l_seeds_ix)))
-        for i, (seeds, weight) in enumerate(zip(l_seeds_ix, l_seeds_weight)):
-            y0[seeds, i] = weight
+        for i, seeds_dict in enumerate(l_seeds_ix):
+            y0[list(seeds_dict.keys()), i] = list(seeds_dict.values())
         return y0
 
     @staticmethod
-    def get_seed_matrix(networks_node_names, l_seeds, l_seeds_weight):
-        seeds_global_ix = [SeedTargetRanking.find_index_from_names(networks_node_names, seeds) for seeds in l_seeds]
-        return SeedTargetRanking.create_start_vector(networks_node_names, seeds_global_ix, l_seeds_weight)
+    def get_seed_matrix(networks_node_names, l_seeds_dict):
+        seeds_global_ix = [SeedTargetRanking.find_index_weight_from_names(networks_node_names, seeds_dict)[0]\
+                           for seeds_dict in l_seeds_dict]
+        return SeedTargetRanking.create_start_vector(networks_node_names, seeds_global_ix)
 
     @staticmethod
     def get_target_indexes(networks_node_names, target_nodes):
         l_targets_ix = []
+        l_targets_ix_notfound = []
         for targets in target_nodes:
-            l_targets_ix.append(SeedTargetRanking.find_index_from_names(networks_node_names, targets))
-            # l_true_targets_ix.append(SeedTargetRanking.find_index_from_names(networks_node_names, true_targets))
+            indexes, not_in_index = SeedTargetRanking.find_index_from_names(networks_node_names, targets)
+            l_targets_ix.append(indexes)
+            l_targets_ix_notfound.append(not_in_index)
 
-        return l_targets_ix
+        return l_targets_ix, l_targets_ix_notfound
 
-    def __init__(self, ranking_to_value_function, node_names, l_seeds, l_targets, l_true_targets, alpha, l_seeds_weight=None,
+    def __init__(self, ranking_to_value_function, node_names, l_seeds_dict, l_targets, l_true_targets, alpha,
                  tol=1e-08, max_iter=100, laplacian_exponent=-0.5):
         """
 
@@ -115,8 +136,8 @@ class SeedTargetRanking(Evaluator):
         for targets, true_targets in zip(l_targets, l_true_targets):
             self.y_true += [1 if target in true_targets else 0 for target in targets]
 
-        seeds_matrix = SeedTargetRanking.get_seed_matrix(self.node_names, l_seeds, l_seeds_weight)
-        l_targets_ix = SeedTargetRanking.get_target_indexes(self.node_names, l_targets)
+        seeds_matrix = SeedTargetRanking.get_seed_matrix(self.node_names, l_seeds_dict)
+        l_targets_ix, l_targets_ix_notfound = SeedTargetRanking.get_target_indexes(self.node_names, l_targets)
 
         def evaluator_function(network):
             if type(network) == networks.Adjacency:
@@ -128,7 +149,8 @@ class SeedTargetRanking(Evaluator):
                     laplacian = network
             else:
                 raise Exception("network is not either an adjacency nor a laplacian.")
-            return ranking_to_value_function(self.ranking_function(laplacian, seeds_matrix, l_targets_ix))
+            return ranking_to_value_function(self.ranking_function(laplacian, seeds_matrix, l_targets_ix, \
+                                                                   l_targets_ix_notfound))
 
         Evaluator.__init__(self, evaluator_function)
 
@@ -170,7 +192,7 @@ class AUROClinkage(SeedTargetRanking):
             # return metrics.roc_auc_score(y_true=true_targets.ravel(), y_score=-target_rankings.ravel(), max_fpr=self.max_fpr)
             return (1 + (auc_unnormalized - min_auc) / (max_auc - min_auc)) / 2
 
-    def __init__(self, node_names, l_seeds, l_targets, l_true_targets, alpha, l_seeds_weight=None,
+    def __init__(self, node_names, l_seeds_dict, l_targets, l_true_targets, alpha,
                  tol=1e-08, max_iter=100, laplacian_exponent=-0.5, max_fpr=1, auroc_normalized=True):
 
         """
@@ -193,11 +215,10 @@ class AUROClinkage(SeedTargetRanking):
 
         SeedTargetRanking.__init__(self, ranking_to_value_function,
                                    node_names=node_names,
-                                   l_seeds=l_seeds,
+                                   l_seeds_dict=l_seeds_dict,
                                    l_targets=l_targets,
                                    l_true_targets=l_true_targets,
                                    alpha=alpha,
-                                   l_seeds_weight=l_seeds_weight,
                                    tol=tol,
                                    max_iter=max_iter,
                                    laplacian_exponent=laplacian_exponent)
@@ -225,7 +246,7 @@ if __name__ == "__main__":
     print(network)
 
     # --------------------------
-    l_seeds = [[seed] for seed in range(N)]#np.eye(N)
+    l_seeds_dict = [{seed: 1} for seed in range(N)]#np.eye(N)
     l_targets = [np.roll(np.arange(N), -n)[1:(n_targets + 1)] for n in range(N)]
 
     p = np.repeat((1 - p1) / (n_targets - 1), n_targets - 1)
@@ -240,11 +261,10 @@ if __name__ == "__main__":
 
     # --------------------------
     evalauc = AUROClinkage(node_names=network.node_names,
-                           l_seeds=l_seeds,
+                           l_seeds_dict=l_seeds_dict,
                            l_targets=l_targets,
                            l_true_targets=l_true_targets,
                            alpha=alpha,
-                           l_seeds_weight=None,
                            tol=1e-08,
                            max_iter=max_iter,
                            max_fpr=max_fpr,
