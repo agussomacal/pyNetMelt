@@ -33,7 +33,7 @@ class SeedTargetRanking(Evaluator):
     TODO: define clusters of seeds and use only one of them to prioritize when looking for disease gene.
     """
 
-    def ranking_function(self, laplacian, seeds_matrix, l_targets_ix, l_targets_ix_notfound):
+    def ranking_function(self, laplacian, seeds_matrix, l_targets_ix):
         """
 
         :param laplacian: laplacian to use
@@ -51,11 +51,18 @@ class SeedTargetRanking(Evaluator):
         assert score_matrix.shape == seeds_matrix.shape
 
         ranking = []
-        for i, (targets, targets_not_found) in enumerate(zip(l_targets_ix, l_targets_ix_notfound)):
-            ranked_targets = (score_matrix.shape[0] - score_matrix[targets, i].argsort().argsort()).tolist()
-            # add the targets not found with the worst ranking
-            ranked_targets += [len(targets)+len(targets_not_found)]*len(targets_not_found)
-            ranking.append(ranked_targets)
+        for i, targets in enumerate(l_targets_ix):
+            # rankings between 1 and the number of targets used.
+            final_rank = np.ones(len(targets))*len(targets)
+            # nodes that are in the network are ranked first.
+            ix = []
+            targets_with_ix = []
+            for j, target in enumerate(targets):
+                if target is not None:
+                    ix.append(j)
+                    targets_with_ix.append(target)
+            final_rank[ix] = (len(targets_with_ix) - score_matrix[targets_with_ix, i].argsort().argsort()).tolist()
+            ranking.append(final_rank)
 
         return ranking
 
@@ -63,29 +70,25 @@ class SeedTargetRanking(Evaluator):
     def find_index_from_names(networks_node_names, specific_node_names):
         assert isinstance(specific_node_names, (list, tuple, np.ndarray)), "should be a list or np.array of nodes"
         indexes = []
-        not_in_index = []
         for gen in specific_node_names:
             lix = list(np.where(gen == np.array(networks_node_names))[0])
             if len(lix) >= 1:
                 assert len(lix) == 1, "There is a duplicated gen in the network"
                 indexes += lix
             else:
-                not_in_index += [gen]
-        return indexes, not_in_index  # return indexes of specific nodes in the set of all nodes.
+                indexes += [None]  # is a nan because there is no index in the network for that query node.
+        return indexes   # return indexes of specific nodes in the set of all nodes.
 
     @staticmethod
     def find_index_weight_from_names(networks_node_names, specific_node_names):
         assert isinstance(specific_node_names, dict), "should be a dictionary of nodes: weight"
         indexes2weight = dict()
-        not_in_index = []
         for gen in specific_node_names.keys():
             lix = list(np.where(gen == np.array(networks_node_names))[0])
             assert len(lix) == 1, "There is a duplicated gen in the network"
             for ix in lix:
                 indexes2weight[ix] = specific_node_names[gen]
-        else:
-            not_in_index += [gen]
-        return indexes2weight, not_in_index  # return indexes of specific nodes in the set of all nodes.
+        return indexes2weight  # return indexes of specific nodes in the set of all nodes.
 
     @staticmethod
     def create_start_vector(networks_node_names, l_seeds_ix):
@@ -96,20 +99,18 @@ class SeedTargetRanking(Evaluator):
 
     @staticmethod
     def get_seed_matrix(networks_node_names, l_seeds_dict):
-        seeds_global_ix = [SeedTargetRanking.find_index_weight_from_names(networks_node_names, seeds_dict)[0]\
+        seeds_global_ix = [SeedTargetRanking.find_index_weight_from_names(networks_node_names, seeds_dict)\
                            for seeds_dict in l_seeds_dict]
         return SeedTargetRanking.create_start_vector(networks_node_names, seeds_global_ix)
 
     @staticmethod
     def get_target_indexes(networks_node_names, target_nodes):
         l_targets_ix = []
-        l_targets_ix_notfound = []
         for targets in target_nodes:
-            indexes, not_in_index = SeedTargetRanking.find_index_from_names(networks_node_names, targets)
+            indexes = SeedTargetRanking.find_index_from_names(networks_node_names, targets)
             l_targets_ix.append(indexes)
-            l_targets_ix_notfound.append(not_in_index)
 
-        return l_targets_ix, l_targets_ix_notfound
+        return l_targets_ix
 
     def __init__(self, ranking_to_value_function, node_names, l_seeds_dict, l_targets, l_true_targets, alpha,
                  tol=1e-08, max_iter=100, laplacian_exponent=-0.5):
@@ -137,7 +138,7 @@ class SeedTargetRanking(Evaluator):
             self.y_true += [1 if target in true_targets else 0 for target in targets]
 
         seeds_matrix = SeedTargetRanking.get_seed_matrix(self.node_names, l_seeds_dict)
-        l_targets_ix, l_targets_ix_notfound = SeedTargetRanking.get_target_indexes(self.node_names, l_targets)
+        l_targets_ix = SeedTargetRanking.get_target_indexes(self.node_names, l_targets)
 
         def evaluator_function(network):
             if type(network) == networks.Adjacency:
@@ -149,8 +150,7 @@ class SeedTargetRanking(Evaluator):
                     laplacian = network
             else:
                 raise Exception("network is not either an adjacency nor a laplacian.")
-            return ranking_to_value_function(self.ranking_function(laplacian, seeds_matrix, l_targets_ix, \
-                                                                   l_targets_ix_notfound))
+            return ranking_to_value_function(self.ranking_function(laplacian, seeds_matrix, l_targets_ix))
 
         Evaluator.__init__(self, evaluator_function)
 
@@ -163,19 +163,11 @@ class AUROClinkage(SeedTargetRanking):
         :return:
         """
 
+        # warning! -terget_rankings because roc_auc goes from minus to plus
         y_score = [-ranking for target_rankings in target_rankings_list for ranking in target_rankings]
         fpr, tpr, thresholds = metrics.roc_curve(y_true=self.y_true,
                                                  y_score=y_score)
 
-        # fpr, tpr, thresholds = metrics.roc_curve(y_true=self.y_true,
-        #                                          y_score=-target_rankings_list.T.ravel())
-
-
-
-
-        # warning! -terget_rankings because roc_auc goes from minus to plus
-        # fpr, tpr, thresholds = metrics.roc_curve(y_true=[element for tt in true_targets for element in tt],
-        #                                          y_score=[-element for tr in target_rankings for element in tr])
         auc_unnormalized = np.trapz(x=fpr[fpr < self.max_fpr], y=tpr[fpr < self.max_fpr])
         ix_last_fp = np.sum(fpr < self.max_fpr)-1
         y_last = tpr[ix_last_fp]+(tpr[ix_last_fp+1]-tpr[ix_last_fp]) \
