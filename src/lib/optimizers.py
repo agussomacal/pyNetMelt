@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 # from bayes_opt import BayesianOptimization
 from hyperopt import hp, tpe, fmin
-from hyperopt import Trials
+from hyperopt import Trials, STATUS_OK
 import os
 import pickle
 
@@ -38,7 +38,11 @@ class Optimizer:
     @staticmethod
     def gamma_objective_function(space, evaluator, integrator):
         gamma = Optimizer.get_gamma_from_values([space[network_name] for network_name in integrator.network_names])
-        return evaluator.evaluate(integrator.integrate(gamma))
+        result_dict = evaluator.evaluate(integrator.integrate(gamma))
+        result_dict['loss'] = result_dict.pop("train")
+        result_dict['status'] = STATUS_OK
+        print(result_dict)
+        return result_dict
 
     @staticmethod
     def get_gamma_from_values(values):
@@ -70,9 +74,14 @@ class Optimizer:
         else:
             sign = 1
 
+        def obj_func(sp):
+            res = self.objective_function(sp)
+            res['loss'] *= sign
+            return res
+
         trials = self.get_trials()
         self.max_evals += len(trials)  # actualize the number of trials to perform
-        best = fmin(fn=lambda sp: sign*self.objective_function(sp),
+        best = fmin(fn=obj_func,
                     space=self.space,
                     trials=trials,
                     algo=tpe.suggest,
@@ -150,7 +159,7 @@ if __name__=="__main__":
     integrator = integrators.LaplacianAdditive(d_networks, -0.5)
 
     # --------------------------
-    l_seeds = [[seed] for seed in range(N)]  # np.eye(N)
+    l_seeds_dict = [{seed: 1} for seed in range(N)]  # np.eye(N)
     l_targets = [np.roll(np.arange(N), -n)[1:(n_targets + 1)] for n in range(N)]
 
     p = np.repeat((1 - p1) / (n_targets - 1), n_targets - 1)
@@ -165,16 +174,16 @@ if __name__=="__main__":
 
     # --------------------------
     evaluator = evaluators.AUROClinkage(node_names=list(range(N)),
-                           l_seeds=l_seeds,
-                           l_targets=l_targets,
-                           l_true_targets=l_true_targets,
-                           alpha=alpha,
-                           l_seeds_weight=None,
-                           tol=1e-08,
-                           max_iter=max_iter,
-                           max_fpr=max_fpr,
-                           laplacian_exponent=laplacian_exponent,
-                           auroc_normalized=False)
+                                        l_seeds_dict=l_seeds_dict,
+                                        l_targets=l_targets,
+                                        l_true_targets=l_true_targets,
+                                        alpha=alpha,
+                                        tol=1e-08,
+                                        max_iter=max_iter,
+                                        max_fpr=max_fpr,
+                                        laplacian_exponent=laplacian_exponent,
+                                        auroc_normalized=False,
+                                        k_fold=3)
     print(evaluator.metric_name)
 
 

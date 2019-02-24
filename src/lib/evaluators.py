@@ -10,9 +10,6 @@ import numpy as np
 import algorithms
 import networks
 
-"""
-"""
-
 
 class Evaluator:
     def __init__(self, evaluator_function):
@@ -113,7 +110,7 @@ class SeedTargetRanking(Evaluator):
         return l_targets_ix
 
     def __init__(self, ranking_to_value_function, node_names, l_seeds_dict, l_targets, l_true_targets, alpha,
-                 tol=1e-08, max_iter=100, laplacian_exponent=-0.5):
+                 tol=1e-08, max_iter=100, laplacian_exponent=-0.5, k_fold=10):
         """
 
         :param ranking_to_value_function:
@@ -132,10 +129,14 @@ class SeedTargetRanking(Evaluator):
         self.max_iter = max_iter
         self.laplacian_exponent = laplacian_exponent
 
+        self.k_fold = k_fold
+        skf = StratifiedKFold(n_splits=self.k_fold)
+
         # true_targets is a mask.
-        self.y_true = []
+        y_true = []
         for targets, true_targets in zip(l_targets, l_true_targets):
-            self.y_true += [1 if target in true_targets else 0 for target in targets]
+            y_true.append([1 if target in true_targets else 0 for target in targets])
+        y_true = np.array(y_true)
 
         seeds_matrix = SeedTargetRanking.get_seed_matrix(self.node_names, l_seeds_dict)
         l_targets_ix = SeedTargetRanking.get_target_indexes(self.node_names, l_targets)
@@ -145,28 +146,38 @@ class SeedTargetRanking(Evaluator):
                 laplacian = network.get_laplacian(self.laplacian_exponent)
             elif type(network) == networks.Laplacian:
                 if network.laplacian_exponent != self.laplacian_exponent:
-                    laplacian = network.get_adjacency(infering_technik="iterative").get_laplacian(self.laplacian_exponent)
+                    laplacian = network.get_adjacency(infering_technik="iterative").get_laplacian(
+                        self.laplacian_exponent)
                 else:
                     laplacian = network
             else:
                 raise Exception("network is not either an adjacency nor a laplacian.")
-            return ranking_to_value_function(self.ranking_function(laplacian, seeds_matrix, l_targets_ix))
+
+            y_score = np.array(self.ranking_function(laplacian, seeds_matrix, l_targets_ix))
+            # y_score = [[-ranking for ranking in target_rankings] for target_rankings in target_rankings_list]
+
+            train_values = np.repeat(np.nan, self.k_fold)
+            test_values = np.repeat(np.nan, self.k_fold)
+            for i, (train_index, test_index) in enumerate(skf.split(X=np.zeros(len(y_true)), y=np.zeros(len(y_true)))):
+                train_values[i] = ranking_to_value_function(y_score[train_index], y_true[train_index])
+                test_values[i] = ranking_to_value_function(y_score[test_index], y_true[test_index])
+
+            return {"train": np.nanmean(train_values), "train std": np.nanstd(train_values),
+                    "test": np.nanmean(test_values), "test std": np.nanstd(test_values)}
 
         Evaluator.__init__(self, evaluator_function)
 
 
 class AUROClinkage(SeedTargetRanking):
-    def ranking_to_value(self, target_rankings_list):
+    def ranking_to_value(self, y_score, y_true):
         """
         :param target_rankings:
         :param true_targets: true_targets is a mask, should be the same shape as target_rankings
         :return:
         """
-
         # warning! -terget_rankings because roc_auc goes from minus to plus
-        y_score = [-ranking for target_rankings in target_rankings_list for ranking in target_rankings]
-        fpr, tpr, thresholds = metrics.roc_curve(y_true=self.y_true,
-                                                 y_score=y_score)
+        fpr, tpr, thresholds = metrics.roc_curve(y_true=np.array(y_true).ravel(),
+                                                 y_score=-np.array(y_score).ravel())
 
         auc_unnormalized = np.trapz(x=fpr[fpr < self.max_fpr], y=tpr[fpr < self.max_fpr])
         ix_last_fp = np.sum(fpr < self.max_fpr)-1
@@ -185,7 +196,7 @@ class AUROClinkage(SeedTargetRanking):
             return (1 + (auc_unnormalized - min_auc) / (max_auc - min_auc)) / 2
 
     def __init__(self, node_names, l_seeds_dict, l_targets, l_true_targets, alpha,
-                 tol=1e-08, max_iter=100, laplacian_exponent=-0.5, max_fpr=1, auroc_normalized=True):
+                 tol=1e-08, max_iter=100, laplacian_exponent=-0.5, max_fpr=1, auroc_normalized=True, k_fold=10):
 
         """
 
@@ -202,10 +213,8 @@ class AUROClinkage(SeedTargetRanking):
         self.max_fpr = max_fpr
         self.auroc_normalized = auroc_normalized
 
-        def ranking_to_value_function(target_rankings_list):
-            return self.ranking_to_value(target_rankings_list)
-
-        SeedTargetRanking.__init__(self, ranking_to_value_function,
+        SeedTargetRanking.__init__(self,
+                                   ranking_to_value_function=self.ranking_to_value,
                                    node_names=node_names,
                                    l_seeds_dict=l_seeds_dict,
                                    l_targets=l_targets,
@@ -213,7 +222,8 @@ class AUROClinkage(SeedTargetRanking):
                                    alpha=alpha,
                                    tol=tol,
                                    max_iter=max_iter,
-                                   laplacian_exponent=laplacian_exponent)
+                                   laplacian_exponent=laplacian_exponent,
+                                   k_fold=k_fold)
 
 
 if __name__ == "__main__":
@@ -264,7 +274,7 @@ if __name__ == "__main__":
                            auroc_normalized=False)
     auc = evalauc.evaluate(network)
 
-    print("AUC: {:.5f}".format(auc))
+    print("AUC train: {:.5f} +- {:.5f} \nAUC test: {:.5f} +- {:.5f}".format(*auc.values()))
     print("AUC should be: p1*(1-p1)/8 = ", p1*(1-p1)/8, "if using auroc unnormalized")
 
 
