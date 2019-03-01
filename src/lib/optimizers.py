@@ -36,13 +36,19 @@ class Optimizer:
         return {network_name: hp.uniform(network_name, 0, 1) for network_name in integrator.network_names}
 
     @staticmethod
+    def get_results_for_optimization(result_dict):
+        result_dict['status'] = STATUS_OK
+        result_dict['loss'] = result_dict.pop("train")
+        result_dict["loss_variance"] = result_dict.pop("train std")
+        result_dict["true_loss"] = result_dict.pop("test")
+        result_dict["true_loss_variance"] = result_dict.pop("test std")
+        return result_dict
+
+    @staticmethod
     def gamma_objective_function(space, evaluator, integrator):
         gamma = Optimizer.get_gamma_from_values([space[network_name] for network_name in integrator.network_names])
         result_dict = evaluator.evaluate(integrator.integrate(gamma))
-        result_dict['loss'] = result_dict.pop("train")
-        result_dict['status'] = STATUS_OK
-        print(result_dict)
-        return result_dict
+        return Optimizer.get_results_for_optimization(result_dict)
 
     @staticmethod
     def get_gamma_from_values(values):
@@ -89,7 +95,10 @@ class Optimizer:
         self.save_trials(trials)
 
         tpe_results = {param_name: param_value for param_name, param_value in trials.idxs_vals[1].items()}
-        tpe_results[self.__name__] = [sign * x['loss'] for x in trials.results]
+        tpe_results["train "+self.__name__] = [sign * x['loss'] for x in trials.results]
+        tpe_results["train std "+self.__name__] = [x['loss_variance'] for x in trials.results]
+        tpe_results["test " + self.__name__] = [x['true_loss'] for x in trials.results]
+        tpe_results["test std " + self.__name__] = [x['true_loss_variance'] for x in trials.results]
         tpe_results = pd.DataFrame(tpe_results)
         return tpe_results, best
 
@@ -186,16 +195,14 @@ if __name__=="__main__":
                                         k_fold=3)
     print(evaluator.metric_name)
 
-
-
     optimizer = Optimizer(optimization_name=evaluator.metric_name+"_"+integrator.__name__,
-                         path2files="/home/crux/Downloads",
-                         space=Optimizer.get_integrator_space(integrator=integrator),
-                         objective_function=lambda sp: Optimizer.gamma_objective_function(sp,
-                                                                                         evaluator=evaluator,
-                                                                                         integrator=integrator),
-                         max_evals=max_evals,
-                         maximize=True)
+                          path2files="/home/crux/Downloads",
+                          space=Optimizer.get_integrator_space(integrator=integrator),
+                          objective_function=lambda sp: Optimizer.gamma_objective_function(sp,
+                                                                                           evaluator=evaluator,
+                                                                                           integrator=integrator),
+                          max_evals=max_evals,
+                          maximize=True)
     tpe_results, best = optimizer.optimize()
     print(tpe_results)
     print(best)

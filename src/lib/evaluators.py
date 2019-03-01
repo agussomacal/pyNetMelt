@@ -21,7 +21,6 @@ class Evaluator:
 
 class SeedTargetRanking(Evaluator):
     """
-    TODO: kfold
     # from sklearn.model_selection import StratifiedKFold
 #         skf = StratifiedKFold(n_splits=self.kfold)
 #         train_seed_set = []
@@ -156,14 +155,16 @@ class SeedTargetRanking(Evaluator):
             y_score = np.array(self.ranking_function(laplacian, seeds_matrix, l_targets_ix))
             # y_score = [[-ranking for ranking in target_rankings] for target_rankings in target_rankings_list]
 
+            values = np.repeat(np.nan, self.k_fold)
             train_values = np.repeat(np.nan, self.k_fold)
             test_values = np.repeat(np.nan, self.k_fold)
             for i, (train_index, test_index) in enumerate(skf.split(X=np.zeros(len(y_true)), y=np.zeros(len(y_true)))):
-                train_values[i] = ranking_to_value_function(y_score[train_index], y_true[train_index])
-                test_values[i] = ranking_to_value_function(y_score[test_index], y_true[test_index])
+                # train_values[i] = ranking_to_value_function(y_score[train_index], y_true[train_index])
+                # test_values[i] = ranking_to_value_function(y_score[test_index], y_true[test_index])
+                values[i] = ranking_to_value_function(y_score[test_index], y_true[test_index])
 
-            return {"train": np.nanmean(train_values), "train std": np.nanstd(train_values),
-                    "test": np.nanmean(test_values), "test std": np.nanstd(test_values)}
+            return {"train": np.nanmean(values[1:]), "train std": np.nanstd(values[1:]),
+                    "test": np.nanmean(values[0]), "test std": np.nanstd(values[1:])}
 
         Evaluator.__init__(self, evaluator_function)
 
