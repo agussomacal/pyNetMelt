@@ -5,7 +5,6 @@ import pandas as pd
 # ----
 import algorithms
 
-
 ######################################################
 #           Constants
 DEFAULT_LAPLACIAN_EXPONENT = -0.5

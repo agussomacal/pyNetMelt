@@ -1,14 +1,3 @@
-
-
-import algorithms
-
-"""
-hyperopt
-https://conference.scipy.org/proceedings/scipy2013/pdfs/bergstra_hyperopt.pdf
-"""
-
-
-########################################################################################################################
 class Integrator:
     def __init__(self, dict_nets_to_integrate, transformation_function, operation_function):
         self.l_nets_to_integrate = list(dict_nets_to_integrate.values())

@@ -1,7 +1,5 @@
-
 import numpy as np
 import pandas as pd
-# from bayes_opt import BayesianOptimization
 from hyperopt import hp, tpe, fmin
 from hyperopt import Trials, STATUS_OK
 import os
