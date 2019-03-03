@@ -156,8 +156,8 @@ class SeedTargetRanking(Evaluator):
             # y_score = [[-ranking for ranking in target_rankings] for target_rankings in target_rankings_list]
 
             values = np.repeat(np.nan, self.k_fold)
-            train_values = np.repeat(np.nan, self.k_fold)
-            test_values = np.repeat(np.nan, self.k_fold)
+            # train_values = np.repeat(np.nan, self.k_fold)
+            # test_values = np.repeat(np.nan, self.k_fold)
             for i, (train_index, test_index) in enumerate(skf.split(X=np.zeros(len(y_true)), y=np.zeros(len(y_true)))):
                 # train_values[i] = ranking_to_value_function(y_score[train_index], y_true[train_index])
                 # test_values[i] = ranking_to_value_function(y_score[test_index], y_true[test_index])
@@ -177,8 +177,8 @@ class AUROClinkage(SeedTargetRanking):
         :return:
         """
         # warning! -terget_rankings because roc_auc goes from minus to plus
-        fpr, tpr, thresholds = metrics.roc_curve(y_true=np.array(y_true).ravel(),
-                                                 y_score=-np.array(y_score).ravel())
+        fpr, tpr, thresholds = metrics.roc_curve(y_true=np.concatenate(y_true),
+                                                 y_score=-np.concatenate(y_score))
 
         auc_unnormalized = np.trapz(x=fpr[fpr < self.max_fpr], y=tpr[fpr < self.max_fpr])
         ix_last_fp = np.sum(fpr < self.max_fpr)-1
@@ -234,9 +234,10 @@ if __name__ == "__main__":
     alpha = 0.2  # alpha of the propagation
 
     max_iter = 100
+    lno = 1
+    n_targets = lno + 1
 
     p1 = 0.8
-    n_targets = 2
     N = 2000
     max_evals = 1
     max_fpr = (1-p1)/2
@@ -255,7 +256,7 @@ if __name__ == "__main__":
     p = np.repeat((1 - p1) / (n_targets - 1), n_targets - 1)
     p = np.insert(p, 0, p1)
     print(p)
-    l_true_targets = [[int(np.random.choice(targets, size=1, p=p))] for targets in l_targets]
+    l_true_targets = [np.random.choice(targets, size=lno, p=p).tolist() for targets in l_targets]
 
     print("Target list:")
     print(l_targets)
