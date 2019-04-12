@@ -129,7 +129,7 @@ class SeedTargetRanking(Evaluator):
         self.laplacian_exponent = laplacian_exponent
 
         self.k_fold = k_fold
-        skf = StratifiedKFold(n_splits=self.k_fold)
+        # skf = StratifiedKFold(n_splits=self.k_fold)
 
         # true_targets is a mask.
         y_true = []
@@ -155,16 +155,39 @@ class SeedTargetRanking(Evaluator):
             y_score = np.array(self.ranking_function(laplacian, seeds_matrix, l_targets_ix))
             # y_score = [[-ranking for ranking in target_rankings] for target_rankings in target_rankings_list]
 
-            values = np.repeat(np.nan, self.k_fold)
+            # values = np.repeat(np.nan, self.k_fold)
+            indexes = np.arange(len(y_true))
+            train_values = np.repeat(np.nan, self.k_fold)
+            test_values = np.repeat(np.nan, self.k_fold)
+            for i in range(self.k_fold):
+                np.random.shuffle(indexes)
+                splited_shuffled_data_ixes = np.array_split(indexes, self.k_fold)
+                values = np.repeat(np.nan, self.k_fold)
+                for j, ixes in enumerate(splited_shuffled_data_ixes):
+                    values[j] = ranking_to_value_function(y_score[ixes], y_true[ixes])
+
+                train_values[i] = np.mean(values)
+                test_values[i] = train_values[i]
+                # values[i] = ranking_to_value_function(y_score[test_index], y_true[test_index])
+
+            return {"train": np.nanmean(train_values), "train std": np.nanstd(train_values),
+                    "test": np.nanmean(test_values), "test std": np.nanstd(train_values)}
+
+            # y_score = np.array(self.ranking_function(laplacian, seeds_matrix, l_targets_ix))
+            # # y_score = [[-ranking for ranking in target_rankings] for target_rankings in target_rankings_list]
+            #
+            # # values = np.repeat(np.nan, self.k_fold)
             # train_values = np.repeat(np.nan, self.k_fold)
             # test_values = np.repeat(np.nan, self.k_fold)
-            for i, (train_index, test_index) in enumerate(skf.split(X=np.zeros(len(y_true)), y=np.zeros(len(y_true)))):
-                # train_values[i] = ranking_to_value_function(y_score[train_index], y_true[train_index])
-                # test_values[i] = ranking_to_value_function(y_score[test_index], y_true[test_index])
-                values[i] = ranking_to_value_function(y_score[test_index], y_true[test_index])
-
-            return {"train": np.nanmean(values[1:]), "train std": np.nanstd(values[1:]),
-                    "test": np.nanmean(values[0]), "test std": np.nanstd(values[1:])}
+            # for i,(train_index, test_index) in enumerate(skf.split(X=np.zeros(len(y_true)), y=np.zeros(len(y_true)))):
+            #     train_values[i] = ranking_to_value_function(y_score[train_index], y_true[train_index])
+            #     test_values[i] = ranking_to_value_function(y_score[test_index], y_true[test_index])
+            #     # values[i] = ranking_to_value_function(y_score[test_index], y_true[test_index])
+            #
+            # return {"train": np.nanmean(train_values), "train std": np.nanstd(train_values),
+            #         "test": np.nanmean(test_values), "test std": np.nanstd(train_values)}
+            # # return {"train": np.nanmean(values[1:]), "train std": np.nanstd(values[1:]),
+            # #         "test": np.nanmean(values[0]), "test std": np.nanstd(values[1:])}
 
         Evaluator.__init__(self, evaluator_function)
 
