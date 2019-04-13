@@ -19,10 +19,15 @@ class Optimizer:
     TODO: optimization with constraints in gamma. Now there is no sum=1; so normalization should be performed afterwards
     """
 
-    def __init__(self, optimization_name, path2files, space, objective_function, max_evals, maximize=True):
+    def __init__(self, optimization_name, space, objective_function, max_evals, append_results=True, path2files=None,
+                 maximize=True):
         self.__name__ = optimization_name
         self.path2files = path2files
-        self.filename = self.path2files + "/" + self.__name__ + ".json"
+        if self.path2files is not None:
+            self.filename = self.path2files + "/" + self.__name__ + ".json"
+        else:
+            self.filename = None
+        self.append_results = append_results
 
         self.space = space
         self.objective_function = objective_function
@@ -63,14 +68,16 @@ class Optimizer:
         return tpe_results
 
     def get_trials(self):
-        if os.path.exists(self.filename):
+        if self.path2files is not None and self.append_results and os.path.exists(self.filename):
             trials = pickle.load(open(self.filename, "rb"))
+            self.max_evals += len(trials)  # actualize the number of trials to perform
         else:
             trials = Trials()
         return trials
 
     def save_trials(self, trials):
-        pickle.dump(trials, open(self.filename, "wb"))
+        if self.path2files is not None:
+            pickle.dump(trials, open(self.filename, "wb"))
 
     def optimize(self):
         if self.maximize:
@@ -84,7 +91,6 @@ class Optimizer:
             return res
 
         trials = self.get_trials()
-        self.max_evals += len(trials)  # actualize the number of trials to perform
         best = fmin(fn=obj_func,
                     space=self.space,
                     trials=trials,
