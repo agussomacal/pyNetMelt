@@ -1,9 +1,12 @@
 
 import numpy as np
 import pandas as pd
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
+from collections import Counter
 
 # ----
-import algorithms
+import src.algorithms as algorithms
 
 ######################################################
 #           Constants
@@ -74,6 +77,34 @@ class Network:
         self.matrix = temp_matrix
         self.node_names = list(np.append(np.array(self.node_names)[common_nodes_ix],
                                          np.array(list(set(new_set_of_nodes).difference(self.node_names)))))
+
+    def get_isolated_nodes(self):
+        return [self.node_names[i] for i, value in enumerate(self.matrix.sum(axis=0) == 0) if value is True]
+
+    def get_gigant_commponent(self):
+        _, membership = connected_components(csgraph=csr_matrix(self.matrix), directed=False, return_labels=True)
+        components_size = Counter(list(membership))
+        gigant_component_ix = list(components_size.keys())[np.argmax(list(components_size.values()))]
+        return list(np.array(self.node_names)[np.where(membership == gigant_component_ix)[0]])
+
+    def filter_nodes(self, new_node_names):
+        new_nodes = list(set(new_node_names).intersection(set(self.node_names)))
+        keep_nodes_dict = {node: i for i, node in enumerate(self.node_names) if node in new_node_names}
+
+        self.matrix = self.matrix[np.ix_(list(keep_nodes_dict.values()), list(keep_nodes_dict.values()))]
+        self.matrix = np.concatenate(self.matrix, np.zeros((self.matrix.shape[0], len(new_nodes))))
+        self.matrix = np.concatenate(self.matrix, np.zeros((len(new_nodes), self.matrix.shape[1])))
+
+        self.node_names = list(keep_nodes_dict.keys()) + new_nodes
+
+    def apply_threshold(self, threshold):
+        self.matrix[self.matrix <= threshold] = 0
+
+    def binarize(self):
+        self.matrix[self.matrix != 0] = 1
+
+    def convert_nan_to_zero(self):
+        self.matrix = np.nan_to_num(self.matrix)
 
 
 class Adjacency(Network):
