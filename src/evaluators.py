@@ -7,8 +7,8 @@ from sklearn import metrics
 from sklearn.model_selection import StratifiedKFold
 import numpy as np
 
-import algorithms
-import networks
+import src.algorithms as algorithms
+import src.networks as networks
 
 
 class Evaluator:
