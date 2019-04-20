@@ -1,9 +1,9 @@
 import os
 import numpy as np
-import src.networks as networks
-import src.integrators as integrators
-import src.evaluators as evaluators
-from src.optimizers import Optimizer
+import lib.networks as networks
+import lib.integrators as integrators
+import lib.evaluators as evaluators
+from lib.optimizers import Optimizer
 from hyperopt import hp, STATUS_OK
 import unittest
 

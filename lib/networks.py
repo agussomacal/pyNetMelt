@@ -6,7 +6,7 @@ from scipy.sparse.csgraph import connected_components
 from collections import Counter
 
 # ----
-import src.algorithms as algorithms
+import lib.algorithms as algorithms
 
 ######################################################
 #           Constants
@@ -45,6 +45,7 @@ class Network:
         else:
             assert len(node_names) == self.matrix.shape[0]
             self.node_names = node_names
+        self.strength = np.zeros(len(self.node_names))
 
     def __add__(self, other):
         pass
@@ -62,21 +63,21 @@ class Network:
     def number_of_nodes(self):
         return len(self.node_names)
 
-    def set_nodes(self, new_set_of_nodes):
-        """
-        TODO: warning, not memory efficient. creating zeros matrix unnecessarily.
-        """
-        # self.matrix = pd.DataFrame(self.matrix, columns=self.node_names, index=self.node_names)
-        # self.matrix = self.matrix.loc[new_set_of_nodes, new_set_of_nodes].fillna(0).values
-
-        common_nodes_ix = [i for i, node in enumerate(self.node_names) if node in new_set_of_nodes]
-        number_of_common_nodes = len(common_nodes_ix)
-        temp_matrix = np.zeros((len(new_set_of_nodes), len(new_set_of_nodes)))
-        temp_matrix[:number_of_common_nodes,:][:,:number_of_common_nodes] = \
-            self.matrix[:, common_nodes_ix][common_nodes_ix, :]
-        self.matrix = temp_matrix
-        self.node_names = list(np.append(np.array(self.node_names)[common_nodes_ix],
-                                         np.array(list(set(new_set_of_nodes).difference(self.node_names)))))
+    # def set_nodes(self, new_set_of_nodes):
+    #     """
+    #     TODO: warning, not memory efficient. creating zeros matrix unnecessarily.
+    #     """
+    #     # self.matrix = pd.DataFrame(self.matrix, columns=self.node_names, index=self.node_names)
+    #     # self.matrix = self.matrix.loc[new_set_of_nodes, new_set_of_nodes].fillna(0).values
+    #
+    #     common_nodes_ix = [i for i, node in enumerate(self.node_names) if node in new_set_of_nodes]
+    #     number_of_common_nodes = len(common_nodes_ix)
+    #     temp_matrix = np.zeros((len(new_set_of_nodes), len(new_set_of_nodes)))
+    #     temp_matrix[:number_of_common_nodes,:][:,:number_of_common_nodes] = \
+    #         self.matrix[:, common_nodes_ix][common_nodes_ix, :]
+    #     self.matrix = temp_matrix
+    #     self.node_names = list(np.append(np.array(self.node_names)[common_nodes_ix],
+    #                                      np.array(list(set(new_set_of_nodes).difference(self.node_names)))))
 
     def get_isolated_nodes(self):
         return [self.node_names[i] for i, value in enumerate(self.matrix.sum(axis=0) == 0) if value is True]
@@ -88,17 +89,34 @@ class Network:
         return list(np.array(self.node_names)[np.where(membership == gigant_component_ix)[0]])
 
     def filter_nodes(self, new_node_names):
-        new_nodes = list(set(new_node_names).intersection(set(self.node_names)))
+        new_nodes = list(set(new_node_names).difference(set(self.node_names)))
         keep_nodes_dict = {node: i for i, node in enumerate(self.node_names) if node in new_node_names}
 
         self.matrix = self.matrix[np.ix_(list(keep_nodes_dict.values()), list(keep_nodes_dict.values()))]
-        self.matrix = np.concatenate(self.matrix, np.zeros((self.matrix.shape[0], len(new_nodes))))
-        self.matrix = np.concatenate(self.matrix, np.zeros((len(new_nodes), self.matrix.shape[1])))
+        self.matrix = np.concatenate([self.matrix, np.zeros((self.matrix.shape[0], len(new_nodes)))], axis=1)
+        self.matrix = np.concatenate([self.matrix, np.zeros((len(new_nodes), self.matrix.shape[1]))], axis=0)
+
+        self.strength = np.append(self.strength[list(keep_nodes_dict.values())], np.zeros(len(new_nodes)))
 
         self.node_names = list(keep_nodes_dict.keys()) + new_nodes
 
-    def apply_threshold(self, threshold):
-        self.matrix[self.matrix <= threshold] = 0
+    def apply_thresholds(self, thresholds, values=[0, 1]):
+        """
+        applies discrete thresholding over the matrix.
+
+        :param thresholds: the successive thresholds
+        :param values: the values to fill edges between thresholds
+        :return: modifies in-place the matrix.
+        """
+
+        if not isinstance(thresholds, list):
+            thresholds = [thresholds]
+
+        self.matrix[self.matrix <= thresholds[0]] = values[0]
+        if len(thresholds) > 1:
+            for lower, upper, val in zip(thresholds[:-1], thresholds[1:], values[1:-1]):
+                self.matrix[(self.matrix > lower) & (self.matrix <= upper)] = val
+        self.matrix[self.matrix > thresholds[-1]] = values[-1]
 
     def binarize(self):
         self.matrix[self.matrix != 0] = 1
@@ -130,6 +148,14 @@ class Adjacency(Network):
         else:
             returned_matrix = self.matrix * other
         return Adjacency(returned_matrix, node_names=self.node_names)
+
+    def __pow__(self, power, modulo=None):
+        return Adjacency(self.matrix**power, node_names=self.node_names)
+
+    def __eq__(self, other):
+        if isinstance(other, np.ndarray):
+            return np.all(other == self.matrix)
+        return np.all(other.matrix == self.matrix) and np.all(self.node_names == other.node_names)
 
     def get_laplacian(self, laplacian_exponent=DEFAULT_LAPLACIAN_EXPONENT):
         return Laplacian(matrix=algorithms.DAD(self.matrix, diagonal1=self.strength, exponent1=laplacian_exponent),
@@ -176,6 +202,12 @@ class Laplacian(Network):
                          strength=strength,
                          laplacian_exponent=self.laplacian_exponent,
                          node_names=self.node_names)
+
+    def __eq__(self, other):
+        if isinstance(other, np.ndarray):
+            return np.all(other == self.matrix)
+        return np.all(other.matrix == self.matrix) and np.all(self.node_names == other.node_names) and \
+               self.laplacian_exponent == other.laplacian_exponent
 
     def infer_strength(self, infering_technik="ones", max_iter=100):
         """
@@ -301,78 +333,11 @@ class Bipartite:
             projection = (projection + projection.T)/2
         return projection
 
-    def get_similar_nodes(self, projection, similarity_lower_threshold):
+    @staticmethod
+    def get_similar_nodes(projection, similarity_lower_threshold):
         dict_of_node_weights = dict()
         # go through the columns because each column represents the neighbouring out direction of node i if e_i is used.
         for node, node_neig_similarity in projection.items():
             neighbours_ix = np.where(node_neig_similarity.values >= similarity_lower_threshold)[0]
             dict_of_node_weights[node] = node_neig_similarity[neighbours_ix].to_dict()
         return dict_of_node_weights
-
-
-if __name__ == "__main__":
-
-    # ------ Test Bipartite ------
-    edgelist = pd.DataFrame([["A", "B", 0.2], ["A", "C", 0.5], ["A", "B", 0.2], ["D", "B", 0.8]], columns=["source", "target", "score"])
-
-    bi_net = Bipartite(edgelist)
-    print(bi_net.get_neighborhood("A", "source"))
-    print(bi_net.get_nodes_ids("source"))
-    print(bi_net.get_nodes_ids("target"))
-
-    bi_net.filter_edges_by_score(0.2)
-    print(bi_net.get_neighborhood("A", "source"))
-    print(bi_net.get_nodes_ids("source"))
-    print(bi_net.get_nodes_ids("target"))
-
-    bi_net.filter_nodes_by_degree("source", degree_lower_threshold=2)
-    print(bi_net.get_neighborhood("A", "source"))
-    print(bi_net.get_nodes_ids("source"))
-    print(bi_net.get_nodes_ids("target"))
-
-    bi_net.filter_nodes_by_intersection("source", ["A", "B", "C"])
-    print(bi_net.get_neighborhood("A", "source"))
-    print(bi_net.get_nodes_ids("source"))
-    print(bi_net.get_nodes_ids("target"))
-
-    edgelist = pd.DataFrame([["A", "1", 1],
-                             ["A", "2", 1],
-                             ["B", "2", 1],
-                             ["B", "3", 1]],
-                            columns=["source", "target", "score"])
-    bi_net = Bipartite(edgelist)
-
-    assert (bi_net.get_proyection("source", "one_mode_proyection").values == np.array([[2, 1], [1, 2]])).all()
-    print(bi_net.get_proyection("source", "one_mode_proyection"))
-    assert (bi_net.get_proyection("source", "laplacian_1", -1, False).values == np.array([[3.0/4, 1/4], [1/4, 3/4]])).all()
-    print(bi_net.get_proyection("source", "laplacian_1", -1, False))
-
-    print(bi_net.get_similar_nodes(bi_net.get_proyection("source", "laplacian_1", -1, False), 0.5))
-
-
-    # ------ Test Adjacency ------
-    N = 5
-    x = np.roll(np.eye(N), 1, axis=0)
-    network_1 = Adjacency(x + x.T)
-    print(network_1)
-    print(network_1.get_laplacian(-0.4))
-
-    x=np.array([[0, 1, 1, 0],
-                [1, 0, 1, 0],
-                [1, 1, 0, 1],
-                [0, 0, 1, 0]])
-
-    network_2 = Adjacency(x)
-    print(network_2)
-
-    laplacian2 = network_2.get_laplacian(-0.5)
-    print(laplacian2)
-    assert np.allclose(laplacian2.matrix[0], np.array([ 0, 1/2, 1/np.sqrt(6), 0]))
-    assert np.allclose(laplacian2.matrix[1][2:], np.array([1/np.sqrt(6), 0]))
-    assert np.allclose(laplacian2.matrix[2][-1], np.array([1/np.sqrt(3)]))
-
-    laplacian2 = network_2.get_laplacian(-0.25)
-    print(laplacian2)
-    assert np.allclose(laplacian2.matrix[0], np.array([0, 1 / 2, 1 / (np.power(2, 1 / 4) * np.power(3, 3 / 4)), 0]))
-    assert np.allclose(laplacian2.matrix[1][2:], np.array([1 / (np.power(2, 1 / 4) * np.power(3, 3 / 4)), 0]))
-    assert np.allclose(laplacian2.matrix[2][-1], np.array([1 / np.power(3, 1 / 4)]))

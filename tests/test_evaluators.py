@@ -1,4 +1,4 @@
-from src.evaluators import *
+from lib.evaluators import *
 import numpy as np
 import unittest
 

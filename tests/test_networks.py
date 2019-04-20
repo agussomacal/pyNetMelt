@@ -1,7 +1,22 @@
-from src.networks import *
+from lib.networks import *
+import copy
 
 import numpy as np
 import unittest
+
+
+class TestNetwork(unittest.TestCase):
+    def setUp(self):
+        np.random.seed(1)
+        self.n = Network(np.array([[0, 1], [1, 0]]), node_names=["A", "B"])
+
+    def test_filter_nodes(self):
+        for new_nodes in [["A"], ["A", "C"]]:
+            n = copy.copy(self.n)
+            n.filter_nodes(new_nodes)
+            assert n.node_names == new_nodes
+            assert len(n.strength) == len(new_nodes)
+            assert n.matrix.shape == (len(new_nodes), len(new_nodes))
 
 
 class TestBipartite(unittest.TestCase):
@@ -72,6 +87,10 @@ class TestAdjacency(unittest.TestCase):
                       [0, 0, 1, 0]])
         self.network_1 = Adjacency(x1 + x1.T)
         self.network_2 = Adjacency(x2)
+
+    def test_power_and_equal(self):
+        assert np.all(self.network_2**2 == self.network_2)
+        assert np.all(((self.network_2+self.network_2)**2) == (self.network_2*4))
 
     def test_get_laplacian(self):
         laplacian2 = self.network_2.get_laplacian(-0.5)

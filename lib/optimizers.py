@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 from hyperopt import hp, tpe, fmin
 from hyperopt import Trials, STATUS_OK
@@ -33,6 +32,11 @@ class Optimizer:
         self.objective_function = objective_function
         self.max_evals = max_evals
         self.maximize = maximize
+
+        if self.maximize:
+            self.sign = -1
+        else:
+            self.sign = 1
 
     @staticmethod
     def get_integrator_space(integrator):
@@ -80,14 +84,9 @@ class Optimizer:
             pickle.dump(trials, open(self.filename, "wb"))
 
     def optimize(self):
-        if self.maximize:
-            sign = -1
-        else:
-            sign = 1
-
         def obj_func(sp):
             res = self.objective_function(sp)
-            res['loss'] *= sign
+            res['loss'] *= self.sign
             return res
 
         trials = self.get_trials()
@@ -98,13 +97,18 @@ class Optimizer:
                     max_evals=self.max_evals)
         self.save_trials(trials)
 
+        tpe_results = self.get_df_from_trials(trials)
+        return tpe_results, best
+
+    def get_df_from_trials(self, trials):
         tpe_results = {param_name: param_value for param_name, param_value in trials.idxs_vals[1].items()}
-        tpe_results["train "+self.__name__] = [sign * x['loss'] for x in trials.results]
-        tpe_results["train std "+self.__name__] = [x['loss_variance'] for x in trials.results]
+        tpe_results["train " + self.__name__] = [self.sign * x['loss'] for x in trials.results]
+        tpe_results["train std " + self.__name__] = [x['loss_variance'] for x in trials.results]
         tpe_results["test " + self.__name__] = [x['true_loss'] for x in trials.results]
         tpe_results["test std " + self.__name__] = [x['true_loss_variance'] for x in trials.results]
         tpe_results = pd.DataFrame(tpe_results)
-        return tpe_results, best
+        return tpe_results
+
 
     # def randomly(self, integrator, max_evals):
     #
